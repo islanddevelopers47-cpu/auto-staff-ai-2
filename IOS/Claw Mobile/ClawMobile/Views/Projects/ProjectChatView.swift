@@ -41,7 +41,7 @@ struct ProjectChatView: View {
                         }
                         .padding()
                     }
-                    .onChange(of: projectsVM.currentProject?.messages.count) { _ in
+                    .onChange(of: projectsVM.currentProject?.messages.count) { _, _ in
                         withAnimation {
                             if let lastMsg = projectsVM.currentProject?.messages.last {
                                 proxy.scrollTo(lastMsg.id, anchor: .bottom)
