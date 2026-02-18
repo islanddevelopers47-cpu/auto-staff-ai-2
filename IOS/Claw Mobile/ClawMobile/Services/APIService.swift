@@ -56,8 +56,15 @@ class APIService {
             "maxTokens": agent.maxTokens,
             "skills": agent.skills,
         ]
+        print("[APIService] Creating agent: \(body)")
         let data = try await post("/agents", body: body)
-        return try JSONDecoder().decode(Agent.self, from: data)
+        print("[APIService] Create agent response: \(String(data: data, encoding: .utf8) ?? "nil")")
+        do {
+            return try JSONDecoder().decode(Agent.self, from: data)
+        } catch {
+            print("[APIService] Failed to decode agent: \(error)")
+            throw APIError.decodingError
+        }
     }
 
     func updateAgent(id: String, updates: [String: Any]) async throws -> Agent {
@@ -126,7 +133,7 @@ class APIService {
         var request = makeRequest(path: path, method: "GET")
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data, path: path)
         return data
     }
 
@@ -134,7 +141,7 @@ class APIService {
         var request = makeRequest(path: path, method: "POST")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data, path: path)
         return data
     }
 
@@ -142,14 +149,14 @@ class APIService {
         var request = makeRequest(path: path, method: "PATCH")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data, path: path)
         return data
     }
 
     private func delete(_ path: String) async throws -> Data {
         let request = makeRequest(path: path, method: "DELETE")
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data, path: path)
         return data
     }
 
@@ -164,11 +171,20 @@ class APIService {
         return request
     }
 
-    private func validateResponse(_ response: URLResponse) throws {
+    private func validateResponse(_ response: URLResponse, data: Data, path: String) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
         guard (200...299).contains(httpResponse.statusCode) else {
+            // Try to extract error message from response
+            if let errorBody = String(data: data, encoding: .utf8) {
+                print("[APIService] \(path) failed (\(httpResponse.statusCode)): \(errorBody)")
+                // Try to parse JSON error
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let errorMessage = json["error"] as? String {
+                    throw APIError.serverError(message: errorMessage)
+                }
+            }
             throw APIError.httpError(statusCode: httpResponse.statusCode)
         }
     }
@@ -180,6 +196,7 @@ enum APIError: LocalizedError {
     case authFailed
     case invalidResponse
     case httpError(statusCode: Int)
+    case serverError(message: String)
     case decodingError
 
     var errorDescription: String? {
@@ -187,6 +204,7 @@ enum APIError: LocalizedError {
         case .authFailed: return "Authentication failed"
         case .invalidResponse: return "Invalid server response"
         case .httpError(let code): return "Server error (HTTP \(code))"
+        case .serverError(let message): return message
         case .decodingError: return "Failed to parse server response"
         }
     }
