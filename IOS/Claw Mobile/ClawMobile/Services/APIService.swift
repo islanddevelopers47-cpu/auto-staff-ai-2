@@ -23,8 +23,16 @@ class APIService {
         request.httpBody = try JSONEncoder().encode(["idToken": idToken])
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw APIError.authFailed
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        
+        if httpResponse.statusCode != 200 {
+            // Log error details for debugging
+            if let errorBody = String(data: data, encoding: .utf8) {
+                print("[APIService] Firebase auth failed (\(httpResponse.statusCode)): \(errorBody)")
+            }
+            throw APIError.httpError(statusCode: httpResponse.statusCode)
         }
         return try JSONDecoder().decode(AuthTokenResponse.self, from: data)
     }

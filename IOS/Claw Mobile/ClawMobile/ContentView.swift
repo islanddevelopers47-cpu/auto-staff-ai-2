@@ -9,10 +9,9 @@ struct ContentView: View {
                 ZStack {
                     Color("Background").ignoresSafeArea()
                     VStack(spacing: 16) {
-                        Image("AppLogo")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 80, height: 80)
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 60))
+                            .foregroundStyle(.linearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                         ProgressView()
                             .tint(.orange)

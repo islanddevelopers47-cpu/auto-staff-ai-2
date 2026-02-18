@@ -23,10 +23,9 @@ struct LoginView: View {
 
                     // Logo
                     VStack(spacing: 12) {
-                        Image("AppLogo")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 80, height: 80)
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 60))
+                            .foregroundStyle(.linearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .shadow(color: .orange.opacity(0.3), radius: 20)
 

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -45,7 +45,7 @@
 		021D6C37A15F9516DD76EA90 /* AgentsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsViewModel.swift; sourceTree = "<group>"; };
 		0A678F652DD8E32241C716C8 /* ClawMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMobileApp.swift; sourceTree = "<group>"; };
 		0E74D780B51765DBCB6738C1 /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
-		17FD1065FC224C2E3553CB6B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		17FD1065FC224C2E3553CB6B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1C0F27A61FF5044C9D9EEF27 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		33189BA1DF9608B57A57C730 /* Agent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Agent.swift; sourceTree = "<group>"; };
 		38799F99A2FD950111E716DE /* AgentDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailView.swift; sourceTree = "<group>"; };
@@ -57,7 +57,7 @@
 		82EBEDDA0009D74D63EE3EBC /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		8CC06E235036D001BC950D3D /* ProjectsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsListView.swift; sourceTree = "<group>"; };
 		926DB3F8B891534BCE46C6C6 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
-		983160E10F25DD387C86DE7C /* ClawMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClawMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		983160E10F25DD387C86DE7C /* ClawMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClawMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1C0920DA5FFACC880EA34AD /* MLXService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXService.swift; sourceTree = "<group>"; };
 		A6DD502376AFF99BAEA0406B /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AF710D734C65A13B038287C0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -255,12 +255,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1500;
-				TargetAttributes = {
-					4B4012B5BA73FDA8DE0AB8FE = {
-						DevelopmentTeam = "";
-						ProvisioningStyle = Automatic;
-					};
-				};
 			};
 			buildConfigurationList = 7B7FFBFC2C3C59B4BA0A8235 /* Build configuration list for PBXProject "ClawMobile" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -276,7 +270,6 @@
 				282350D1DC7B41EA61D8E5AE /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				38E44A87D2E12780389B5485 /* XCRemoteSwiftPackageReference "mlx-swift" */,
 			);
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -404,8 +397,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "";
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ClawMobile/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -415,6 +410,7 @@
 				);
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.clawstaffer.mobile;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -427,8 +423,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "";
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ClawMobile/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -438,6 +436,7 @@
 				);
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.clawstaffer.mobile;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
