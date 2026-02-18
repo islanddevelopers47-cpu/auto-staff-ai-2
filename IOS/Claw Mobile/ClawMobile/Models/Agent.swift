@@ -33,6 +33,44 @@ struct Agent: Codable, Identifiable, Hashable {
         case updatedAt = "updated_at"
     }
 
+    init(id: String, userId: String? = nil, name: String, description: String? = nil,
+         systemPrompt: String, modelProvider: String, modelName: String,
+         temperature: Double, maxTokens: Int, skills: [String], config: [String: AnyCodable],
+         isBuiltin: Bool, createdAt: String? = nil, updatedAt: String? = nil) {
+        self.id = id
+        self.userId = userId
+        self.name = name
+        self.description = description
+        self.systemPrompt = systemPrompt
+        self.modelProvider = modelProvider
+        self.modelName = modelName
+        self.temperature = temperature
+        self.maxTokens = maxTokens
+        self.skills = skills
+        self.config = config
+        self.isBuiltin = isBuiltin
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        userId = try container.decodeIfPresent(String.self, forKey: .userId)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? "You are a helpful assistant."
+        modelProvider = try container.decodeIfPresent(String.self, forKey: .modelProvider) ?? "mlx"
+        modelName = try container.decodeIfPresent(String.self, forKey: .modelName) ?? "gpt-4o-mini"
+        temperature = try container.decodeIfPresent(Double.self, forKey: .temperature) ?? 0.7
+        maxTokens = try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? 4096
+        skills = try container.decodeIfPresent([String].self, forKey: .skills) ?? []
+        config = try container.decodeIfPresent([String: AnyCodable].self, forKey: .config) ?? [:]
+        isBuiltin = try container.decodeIfPresent(Bool.self, forKey: .isBuiltin) ?? false
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
+    }
+
     static func new() -> Agent {
         Agent(
             id: "",
