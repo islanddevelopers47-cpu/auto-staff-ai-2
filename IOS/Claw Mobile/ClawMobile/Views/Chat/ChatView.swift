@@ -61,9 +61,9 @@ struct ChatView: View {
                     .padding(.vertical, 10)
                     .background(Color.white.opacity(0.06))
                 } else {
-                    // No agent selected
+                    // No agent selected - fill remaining space
+                    Spacer()
                     VStack(spacing: 16) {
-                        Spacer()
                         Image(systemName: "bubble.left.and.bubble.right")
                             .font(.system(size: 48))
                             .foregroundColor(.gray)
@@ -84,8 +84,8 @@ struct ChatView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(10)
                         }
-                        Spacer()
                     }
+                    Spacer()
                 }
 
                 if chatVM.selectedAgent != nil {
