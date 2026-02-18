@@ -7,8 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		GOOGLESIGNINFRAME1234567 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = GOOGLESIGNINPROD12345678 /* GoogleSignIn */; };
-		GOOGLESIGNINFRAME7654321 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = GOOGLESIGNINPROD87654321 /* GoogleSignInSwift */; };
 		25ED3E133CDF58BBA371C92A /* StorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6820BA6D65F61C488CCF546 /* StorageService.swift */; };
 		448A9B5A03BAAAEC3C41C74B /* ClawMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A678F652DD8E32241C716C8 /* ClawMobileApp.swift */; };
 		45A4AB5771484542363D6C2E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 17FD1065FC224C2E3553CB6B /* PrivacyInfo.xcprivacy */; };
@@ -41,6 +39,8 @@
 		F480A93DC87A4CB85EA7918D /* AgentsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 021D6C37A15F9516DD76EA90 /* AgentsViewModel.swift */; };
 		F71709E9D3BF8ADA5EB17508 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA768D751C8E5D1BC3B12C3A /* ChatMessage.swift */; };
 		FECA8C2748E1D7D940F329A6 /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D24CC85DFEB2B277B8CD74BD /* DashboardViewModel.swift */; };
+		GOOGLESIGNINFRAME1234567 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = GOOGLESIGNINPROD12345678 /* GoogleSignIn */; };
+		GOOGLESIGNINFRAME7654321 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = GOOGLESIGNINPROD87654321 /* GoogleSignInSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */

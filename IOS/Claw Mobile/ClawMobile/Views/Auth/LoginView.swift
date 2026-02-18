@@ -1,5 +1,4 @@
 import SwiftUI
-import AuthenticationServices
 
 struct LoginView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -147,20 +146,6 @@ struct LoginView: View {
                                 .frame(height: 1)
                         }
                         .padding(.vertical, 8)
-
-                        // Sign in with Apple
-                        SignInWithAppleButton(.signIn) { request in
-                            let appleRequest = authViewModel.authService.prepareAppleSignInRequest()
-                            request.requestedScopes = appleRequest.requestedScopes
-                            request.nonce = appleRequest.nonce
-                        } onCompletion: { result in
-                            Task {
-                                await authViewModel.handleAppleSignIn(result: result)
-                            }
-                        }
-                        .signInWithAppleButtonStyle(.white)
-                        .frame(height: 50)
-                        .cornerRadius(10)
 
                         // Sign in with Google
                         Button {
