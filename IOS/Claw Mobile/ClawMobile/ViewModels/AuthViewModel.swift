@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseAuth
+import AuthenticationServices
 import Combine
 
 @MainActor
@@ -12,7 +13,7 @@ class AuthViewModel: ObservableObject {
     @Published var isSignUp = false
 
     private var cancellables = Set<AnyCancellable>()
-    private let authService = AuthService.shared
+    let authService = AuthService.shared
 
     init() {
         // Observe auth state changes
@@ -78,5 +79,44 @@ class AuthViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    // MARK: - Sign in with Google
+
+    func signInWithGoogle() async {
+        errorMessage = nil
+        isLoading = true
+
+        do {
+            try await authService.signInWithGoogle()
+            isAuthenticated = authService.isAuthenticated
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isLoading = false
+    }
+
+    // MARK: - Sign in with Apple
+
+    func handleAppleSignIn(result: Result<ASAuthorization, Error>) async {
+        errorMessage = nil
+        isLoading = true
+
+        switch result {
+        case .success(let authorization):
+            do {
+                try await authService.handleAppleSignIn(authorization: authorization)
+                isAuthenticated = authService.isAuthenticated
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        case .failure(let error):
+            if (error as NSError).code != ASAuthorizationError.canceled.rawValue {
+                errorMessage = error.localizedDescription
+            }
+        }
+
+        isLoading = false
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 struct LoginView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -132,6 +133,54 @@ struct LoginView: View {
                                 .font(.caption)
                                 .foregroundColor(.orange)
                         }
+
+                        // Divider
+                        HStack {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(height: 1)
+                            Text("or")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(height: 1)
+                        }
+                        .padding(.vertical, 8)
+
+                        // Sign in with Apple
+                        SignInWithAppleButton(.signIn) { request in
+                            let appleRequest = authViewModel.authService.prepareAppleSignInRequest()
+                            request.requestedScopes = appleRequest.requestedScopes
+                            request.nonce = appleRequest.nonce
+                        } onCompletion: { result in
+                            Task {
+                                await authViewModel.handleAppleSignIn(result: result)
+                            }
+                        }
+                        .signInWithAppleButtonStyle(.white)
+                        .frame(height: 50)
+                        .cornerRadius(10)
+
+                        // Sign in with Google
+                        Button {
+                            Task {
+                                await authViewModel.signInWithGoogle()
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "g.circle.fill")
+                                    .font(.title2)
+                                Text("Sign in with Google")
+                                    .fontWeight(.medium)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(14)
+                            .background(Color.white)
+                            .foregroundColor(.black)
+                            .cornerRadius(10)
+                        }
+                        .disabled(authViewModel.isLoading)
                     }
                     .padding(24)
                     .background(Color.white.opacity(0.05))
