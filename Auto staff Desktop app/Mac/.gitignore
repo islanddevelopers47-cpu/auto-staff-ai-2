@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+*.db
+release/
+out/
+build/
+*.dmg
+firebase-service-account.json
+.env
