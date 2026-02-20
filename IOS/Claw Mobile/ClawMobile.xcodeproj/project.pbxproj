@@ -45,15 +45,6 @@
 
 /* Begin PBXFileReference section */
 		021D6C37A15F9516DD76EA90 /* AgentsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsViewModel.swift; sourceTree = "<group>"; };
-		077C627D2F48704E00B67482 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
-		077C627F2F48704E00B67482 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
-		077C62812F48704E00B67482 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
-		077C62832F48704E00B67482 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
-		077C62852F48704E00B67482 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
-		077C62882F48704E00B67482 /* appstore.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = appstore.png; sourceTree = "<group>"; };
-		077C62892F48704E00B67482 /* appstore-rounded.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "appstore-rounded.png"; sourceTree = "<group>"; };
-		077C628A2F48704E00B67482 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		077C628B2F48704E00B67482 /* playstore.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = playstore.png; sourceTree = "<group>"; };
 		0A678F652DD8E32241C716C8 /* ClawMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMobileApp.swift; sourceTree = "<group>"; };
 		0E74D780B51765DBCB6738C1 /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
 		17FD1065FC224C2E3553CB6B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -110,74 +101,9 @@
 			path = Auth;
 			sourceTree = "<group>";
 		};
-		077C627E2F48704E00B67482 /* mipmap-hdpi */ = {
-			isa = PBXGroup;
-			children = (
-				077C627D2F48704E00B67482 /* ic_launcher.png */,
-			);
-			path = "mipmap-hdpi";
-			sourceTree = "<group>";
-		};
-		077C62802F48704E00B67482 /* mipmap-mdpi */ = {
-			isa = PBXGroup;
-			children = (
-				077C627F2F48704E00B67482 /* ic_launcher.png */,
-			);
-			path = "mipmap-mdpi";
-			sourceTree = "<group>";
-		};
-		077C62822F48704E00B67482 /* mipmap-xhdpi */ = {
-			isa = PBXGroup;
-			children = (
-				077C62812F48704E00B67482 /* ic_launcher.png */,
-			);
-			path = "mipmap-xhdpi";
-			sourceTree = "<group>";
-		};
-		077C62842F48704E00B67482 /* mipmap-xxhdpi */ = {
-			isa = PBXGroup;
-			children = (
-				077C62832F48704E00B67482 /* ic_launcher.png */,
-			);
-			path = "mipmap-xxhdpi";
-			sourceTree = "<group>";
-		};
-		077C62862F48704E00B67482 /* mipmap-xxxhdpi */ = {
-			isa = PBXGroup;
-			children = (
-				077C62852F48704E00B67482 /* ic_launcher.png */,
-			);
-			path = "mipmap-xxxhdpi";
-			sourceTree = "<group>";
-		};
-		077C62872F48704E00B67482 /* android */ = {
-			isa = PBXGroup;
-			children = (
-				077C627E2F48704E00B67482 /* mipmap-hdpi */,
-				077C62802F48704E00B67482 /* mipmap-mdpi */,
-				077C62822F48704E00B67482 /* mipmap-xhdpi */,
-				077C62842F48704E00B67482 /* mipmap-xxhdpi */,
-				077C62862F48704E00B67482 /* mipmap-xxxhdpi */,
-			);
-			path = android;
-			sourceTree = "<group>";
-		};
-		077C628C2F48704E00B67482 /* AppIcons */ = {
-			isa = PBXGroup;
-			children = (
-				077C62872F48704E00B67482 /* android */,
-				077C62882F48704E00B67482 /* appstore.png */,
-				077C62892F48704E00B67482 /* appstore-rounded.png */,
-				077C628A2F48704E00B67482 /* Assets.xcassets */,
-				077C628B2F48704E00B67482 /* playstore.png */,
-			);
-			path = AppIcons;
-			sourceTree = "<group>";
-		};
 		163CC6757DB044658CB33D78 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				077C628C2F48704E00B67482 /* AppIcons */,
 				983160E10F25DD387C86DE7C /* ClawMobile.app */,
 			);
 			name = Products;
