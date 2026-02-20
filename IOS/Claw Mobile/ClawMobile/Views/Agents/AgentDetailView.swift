@@ -8,11 +8,6 @@ struct AgentDetailView: View {
     var isNew: Bool = false
 
     @State private var isSaving = false
-    @FocusState private var focusedField: Field?
-
-    enum Field {
-        case name, description, systemPrompt
-    }
 
     var body: some View {
         NavigationStack {
@@ -23,14 +18,12 @@ struct AgentDetailView: View {
                         VStack(spacing: 12) {
                             TextField("Agent Name", text: $agent.name)
                                 .textFieldStyle(DarkTextFieldStyle())
-                                .focused($focusedField, equals: .name)
 
                             TextField("Description (optional)", text: Binding(
                                 get: { agent.description ?? "" },
                                 set: { agent.description = $0.isEmpty ? nil : $0 }
                             ))
                             .textFieldStyle(DarkTextFieldStyle())
-                            .focused($focusedField, equals: .description)
                         }
                     }
 
@@ -43,7 +36,6 @@ struct AgentDetailView: View {
                             .padding(8)
                             .background(Color.white.opacity(0.08))
                             .cornerRadius(8)
-                            .focused($focusedField, equals: .systemPrompt)
                     }
 
                     // Model Section
@@ -144,7 +136,7 @@ struct AgentDetailView: View {
 
                     // Save Button - Large, prominent, always visible
                     Button {
-                        focusedField = nil
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                         Task { await saveAgent() }
                     } label: {
                         HStack {
@@ -201,9 +193,7 @@ struct AgentDetailView: View {
                     }
                 }
             }
-            .onTapGesture {
-                focusedField = nil
-            }
+            .scrollDismissesKeyboard(.interactively)
             .overlay {
                 if let error = agentsVM.errorMessage {
                     VStack {
