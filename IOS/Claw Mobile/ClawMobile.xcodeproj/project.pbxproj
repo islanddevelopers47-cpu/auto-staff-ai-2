@@ -45,15 +45,15 @@
 
 /* Begin PBXFileReference section */
 		021D6C37A15F9516DD76EA90 /* AgentsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsViewModel.swift; sourceTree = "<group>"; };
-		074B1E4F2F466A71004562D8 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
-		074B1E512F466A71004562D8 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
-		074B1E532F466A71004562D8 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
-		074B1E552F466A71004562D8 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
-		074B1E572F466A71004562D8 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
-		074B1E5A2F466A71004562D8 /* appstore.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = appstore.png; sourceTree = "<group>"; };
-		074B1E5B2F466A71004562D8 /* appstore-rounded.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "appstore-rounded.png"; sourceTree = "<group>"; };
-		074B1E5C2F466A71004562D8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		074B1E5D2F466A71004562D8 /* playstore.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = playstore.png; sourceTree = "<group>"; };
+		077C627D2F48704E00B67482 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
+		077C627F2F48704E00B67482 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
+		077C62812F48704E00B67482 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
+		077C62832F48704E00B67482 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
+		077C62852F48704E00B67482 /* ic_launcher.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ic_launcher.png; sourceTree = "<group>"; };
+		077C62882F48704E00B67482 /* appstore.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = appstore.png; sourceTree = "<group>"; };
+		077C62892F48704E00B67482 /* appstore-rounded.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "appstore-rounded.png"; sourceTree = "<group>"; };
+		077C628A2F48704E00B67482 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		077C628B2F48704E00B67482 /* playstore.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = playstore.png; sourceTree = "<group>"; };
 		0A678F652DD8E32241C716C8 /* ClawMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMobileApp.swift; sourceTree = "<group>"; };
 		0E74D780B51765DBCB6738C1 /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
 		17FD1065FC224C2E3553CB6B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -110,66 +110,66 @@
 			path = Auth;
 			sourceTree = "<group>";
 		};
-		074B1E502F466A71004562D8 /* mipmap-hdpi */ = {
+		077C627E2F48704E00B67482 /* mipmap-hdpi */ = {
 			isa = PBXGroup;
 			children = (
-				074B1E4F2F466A71004562D8 /* ic_launcher.png */,
+				077C627D2F48704E00B67482 /* ic_launcher.png */,
 			);
 			path = "mipmap-hdpi";
 			sourceTree = "<group>";
 		};
-		074B1E522F466A71004562D8 /* mipmap-mdpi */ = {
+		077C62802F48704E00B67482 /* mipmap-mdpi */ = {
 			isa = PBXGroup;
 			children = (
-				074B1E512F466A71004562D8 /* ic_launcher.png */,
+				077C627F2F48704E00B67482 /* ic_launcher.png */,
 			);
 			path = "mipmap-mdpi";
 			sourceTree = "<group>";
 		};
-		074B1E542F466A71004562D8 /* mipmap-xhdpi */ = {
+		077C62822F48704E00B67482 /* mipmap-xhdpi */ = {
 			isa = PBXGroup;
 			children = (
-				074B1E532F466A71004562D8 /* ic_launcher.png */,
+				077C62812F48704E00B67482 /* ic_launcher.png */,
 			);
 			path = "mipmap-xhdpi";
 			sourceTree = "<group>";
 		};
-		074B1E562F466A71004562D8 /* mipmap-xxhdpi */ = {
+		077C62842F48704E00B67482 /* mipmap-xxhdpi */ = {
 			isa = PBXGroup;
 			children = (
-				074B1E552F466A71004562D8 /* ic_launcher.png */,
+				077C62832F48704E00B67482 /* ic_launcher.png */,
 			);
 			path = "mipmap-xxhdpi";
 			sourceTree = "<group>";
 		};
-		074B1E582F466A71004562D8 /* mipmap-xxxhdpi */ = {
+		077C62862F48704E00B67482 /* mipmap-xxxhdpi */ = {
 			isa = PBXGroup;
 			children = (
-				074B1E572F466A71004562D8 /* ic_launcher.png */,
+				077C62852F48704E00B67482 /* ic_launcher.png */,
 			);
 			path = "mipmap-xxxhdpi";
 			sourceTree = "<group>";
 		};
-		074B1E592F466A71004562D8 /* android */ = {
+		077C62872F48704E00B67482 /* android */ = {
 			isa = PBXGroup;
 			children = (
-				074B1E502F466A71004562D8 /* mipmap-hdpi */,
-				074B1E522F466A71004562D8 /* mipmap-mdpi */,
-				074B1E542F466A71004562D8 /* mipmap-xhdpi */,
-				074B1E562F466A71004562D8 /* mipmap-xxhdpi */,
-				074B1E582F466A71004562D8 /* mipmap-xxxhdpi */,
+				077C627E2F48704E00B67482 /* mipmap-hdpi */,
+				077C62802F48704E00B67482 /* mipmap-mdpi */,
+				077C62822F48704E00B67482 /* mipmap-xhdpi */,
+				077C62842F48704E00B67482 /* mipmap-xxhdpi */,
+				077C62862F48704E00B67482 /* mipmap-xxxhdpi */,
 			);
 			path = android;
 			sourceTree = "<group>";
 		};
-		074B1E5E2F466A71004562D8 /* AppIcons */ = {
+		077C628C2F48704E00B67482 /* AppIcons */ = {
 			isa = PBXGroup;
 			children = (
-				074B1E592F466A71004562D8 /* android */,
-				074B1E5A2F466A71004562D8 /* appstore.png */,
-				074B1E5B2F466A71004562D8 /* appstore-rounded.png */,
-				074B1E5C2F466A71004562D8 /* Assets.xcassets */,
-				074B1E5D2F466A71004562D8 /* playstore.png */,
+				077C62872F48704E00B67482 /* android */,
+				077C62882F48704E00B67482 /* appstore.png */,
+				077C62892F48704E00B67482 /* appstore-rounded.png */,
+				077C628A2F48704E00B67482 /* Assets.xcassets */,
+				077C628B2F48704E00B67482 /* playstore.png */,
 			);
 			path = AppIcons;
 			sourceTree = "<group>";
@@ -177,6 +177,7 @@
 		163CC6757DB044658CB33D78 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				077C628C2F48704E00B67482 /* AppIcons */,
 				983160E10F25DD387C86DE7C /* ClawMobile.app */,
 			);
 			name = Products;
@@ -273,7 +274,6 @@
 		E41038092F318C1F424DD8E4 = {
 			isa = PBXGroup;
 			children = (
-				074B1E5E2F466A71004562D8 /* AppIcons */,
 				6C0B85B4DEEA8000803DDFA3 /* ClawMobile */,
 				163CC6757DB044658CB33D78 /* Products */,
 			);
