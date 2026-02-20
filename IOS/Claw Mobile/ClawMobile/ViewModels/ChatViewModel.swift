@@ -6,13 +6,14 @@ class ChatViewModel: ObservableObject {
     @Published var isGenerating = false
     @Published var errorMessage: String?
     @Published var selectedAgent: Agent?
-    @Published var streamingText = ""
 
-    private let mlxService = MLXService.shared
+    private let api = APIService.shared
     private let storageService = StorageService.shared
+    private var sessionId: String?
 
     func selectAgent(_ agent: Agent) {
         selectedAgent = agent
+        sessionId = nil
         messages = storageService.getChatHistory(agentId: agent.id)
     }
 
@@ -22,47 +23,36 @@ class ChatViewModel: ObservableObject {
             return
         }
 
-        guard mlxService.isModelLoaded else {
-            errorMessage = "No model loaded. Go to Settings to download and load a model."
+        guard !agent.id.isEmpty else {
+            errorMessage = "Agent not saved yet"
             return
         }
 
-        // Add user message
         let userMsg = ChatMessage.userMessage(content)
         messages.append(userMsg)
         saveChatHistory()
 
         isGenerating = true
-        streamingText = ""
         errorMessage = nil
 
-        // Add placeholder assistant message
-        let assistantMsg = ChatMessage.assistantMessage("", agentId: agent.id, agentName: agent.name)
-        messages.append(assistantMsg)
+        let placeholder = ChatMessage.assistantMessage("...", agentId: agent.id, agentName: agent.name)
+        messages.append(placeholder)
 
         do {
-            let history = messages.dropLast(2).map { (role: $0.role, content: $0.content) }
-
-            try await mlxService.generateStreaming(
-                systemPrompt: agent.systemPrompt,
-                conversationHistory: Array(history),
-                userMessage: content,
-                temperature: agent.temperature,
-                maxTokens: agent.maxTokens
-            ) { [weak self] token in
-                guard let self = self else { return }
-                Task { @MainActor in
-                    self.streamingText += token
-                    if let lastIndex = self.messages.indices.last {
-                        self.messages[lastIndex] = ChatMessage.assistantMessage(
-                            self.streamingText,
-                            agentId: agent.id,
-                            agentName: agent.name
-                        )
-                    }
-                }
+            await AuthService.shared.refreshTokenIfNeeded()
+            let result = try await api.chat(
+                agentId: agent.id,
+                message: content,
+                sessionId: sessionId
+            )
+            sessionId = result.sessionId
+            if let lastIndex = messages.indices.last {
+                messages[lastIndex] = ChatMessage.assistantMessage(
+                    result.response,
+                    agentId: agent.id,
+                    agentName: agent.name
+                )
             }
-
             saveChatHistory()
         } catch {
             errorMessage = error.localizedDescription
@@ -76,11 +66,11 @@ class ChatViewModel: ObservableObject {
         }
 
         isGenerating = false
-        streamingText = ""
     }
 
     func clearHistory() {
         messages.removeAll()
+        sessionId = nil
         if let agent = selectedAgent {
             storageService.clearChatHistory(agentId: agent.id)
         }

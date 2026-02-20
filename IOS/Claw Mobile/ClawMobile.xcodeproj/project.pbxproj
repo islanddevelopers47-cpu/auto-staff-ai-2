@@ -45,6 +45,10 @@
 
 /* Begin PBXFileReference section */
 		021D6C37A15F9516DD76EA90 /* AgentsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsViewModel.swift; sourceTree = "<group>"; };
+		07056E8C2F48783600A46D5E /* appstore.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = appstore.png; sourceTree = "<group>"; };
+		07056E8D2F48783600A46D5E /* appstore-rounded.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "appstore-rounded.png"; sourceTree = "<group>"; };
+		07056E8E2F48783600A46D5E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		07056E8F2F48783600A46D5E /* playstore.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = playstore.png; sourceTree = "<group>"; };
 		0A678F652DD8E32241C716C8 /* ClawMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMobileApp.swift; sourceTree = "<group>"; };
 		0E74D780B51765DBCB6738C1 /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
 		17FD1065FC224C2E3553CB6B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -99,6 +103,17 @@
 				1C0F27A61FF5044C9D9EEF27 /* LoginView.swift */,
 			);
 			path = Auth;
+			sourceTree = "<group>";
+		};
+		07056E902F48783600A46D5E /* AppIcons */ = {
+			isa = PBXGroup;
+			children = (
+				07056E8C2F48783600A46D5E /* appstore.png */,
+				07056E8D2F48783600A46D5E /* appstore-rounded.png */,
+				07056E8E2F48783600A46D5E /* Assets.xcassets */,
+				07056E8F2F48783600A46D5E /* playstore.png */,
+			);
+			path = AppIcons;
 			sourceTree = "<group>";
 		};
 		163CC6757DB044658CB33D78 /* Products */ = {
@@ -200,6 +215,7 @@
 		E41038092F318C1F424DD8E4 = {
 			isa = PBXGroup;
 			children = (
+				07056E902F48783600A46D5E /* AppIcons */,
 				6C0B85B4DEEA8000803DDFA3 /* ClawMobile */,
 				163CC6757DB044658CB33D78 /* Products */,
 			);

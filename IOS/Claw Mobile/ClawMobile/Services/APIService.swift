@@ -76,6 +76,18 @@ class APIService {
         _ = try await delete("/agents/\(id)")
     }
 
+    // MARK: - Chat
+
+    func chat(agentId: String, message: String, sessionId: String? = nil) async throws -> ChatResponse {
+        var body: [String: Any] = [
+            "agentId": agentId,
+            "message": message,
+        ]
+        if let sid = sessionId { body["sessionId"] = sid }
+        let data = try await post("/chat", body: body)
+        return try JSONDecoder().decode(ChatResponse.self, from: data)
+    }
+
     // MARK: - Projects
 
     func fetchProjects() async throws -> [Project] {
@@ -195,6 +207,14 @@ class APIService {
             throw APIError.httpError(statusCode: httpResponse.statusCode)
         }
     }
+}
+
+// MARK: - Chat Response
+
+struct ChatResponse: Codable {
+    let response: String
+    let sessionId: String
+    let model: String
 }
 
 // MARK: - API Errors
