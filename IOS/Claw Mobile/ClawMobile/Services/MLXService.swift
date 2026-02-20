@@ -179,7 +179,7 @@ class MLXService: ObservableObject {
         userMessage: String,
         temperature: Double = 0.7,
         maxTokens: Int = 2048,
-        onToken: @escaping @Sendable (String) -> Void
+        onToken: @escaping (String) -> Void
     ) async throws {
         guard let container = modelContainer else { throw MLXError.modelNotLoaded }
 
