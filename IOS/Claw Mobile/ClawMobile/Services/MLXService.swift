@@ -3,7 +3,6 @@ import MLX
 import MLXNN
 import MLXRandom
 import MLXLLM
-import MLXLMCommon
 
 /// Available on-device models for MLX inference
 struct MLXModelInfo: Identifiable, Hashable {
