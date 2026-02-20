@@ -215,13 +215,15 @@ class MLXService: ObservableObject {
         systemPrompt: String,
         history: [(role: String, content: String)],
         userMessage: String
-    ) -> [[String: String]] {
-        var msgs: [[String: String]] = [["role": "system", "content": systemPrompt]]
+    ) -> [Chat.Message] {
+        var msgs: [Chat.Message] = [Chat.Message(role: "system", content: systemPrompt)]
         for msg in history.suffix(20) {
-            msgs.append(["role": msg.role == "user" ? "user" : "assistant",
-                         "content": msg.content])
+            msgs.append(Chat.Message(
+                role: msg.role == "user" ? "user" : "assistant",
+                content: msg.content
+            ))
         }
-        msgs.append(["role": "user", "content": userMessage])
+        msgs.append(Chat.Message(role: "user", content: userMessage))
         return msgs
     }
 
