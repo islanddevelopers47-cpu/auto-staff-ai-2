@@ -3,6 +3,7 @@ import MLX
 import MLXNN
 import MLXRandom
 import MLXLLM
+import MLXLMCommon
 
 /// Available on-device models for MLX inference
 struct MLXModelInfo: Identifiable, Hashable {
@@ -156,18 +157,18 @@ class MLXService: ObservableObject {
         let messages = buildMessages(systemPrompt: systemPrompt,
                                      history: conversationHistory,
                                      userMessage: userMessage)
-        let result = try await container.perform { context in
+        let params = GenerateParameters(maxTokens: maxTokens, temperature: Float(temperature))
+        return try await container.perform { context in
             let input = try await context.processor.prepare(
-                input: UserInput(prompt: .chat(messages))
+                input: UserInput(chat: messages)
             )
-            return try MLXLMCommon.generate(
-                input: input,
-                parameters: GenerateParameters(maxTokens: maxTokens,
-                                               temperature: Float(temperature)),
-                context: context
-            ) { _ in .more }
+            let stream = try generate(input: input, parameters: params, context: context)
+            var result = ""
+            for await generation in stream {
+                if let chunk = generation.chunk { result += chunk }
+            }
+            return result
         }
-        return result.output
     }
 
     /// Generates a response with streaming token callbacks.
@@ -188,22 +189,18 @@ class MLXService: ObservableObject {
         let messages = buildMessages(systemPrompt: systemPrompt,
                                      history: conversationHistory,
                                      userMessage: userMessage)
-        let _ = try await container.perform { context in
+        let params = GenerateParameters(maxTokens: maxTokens, temperature: Float(temperature))
+        try await container.perform { context in
             let input = try await context.processor.prepare(
-                input: UserInput(prompt: .chat(messages))
+                input: UserInput(chat: messages)
             )
-            var accumulated: [Int] = []
-            return try MLXLMCommon.generate(
-                input: input,
-                parameters: GenerateParameters(maxTokens: maxTokens,
-                                               temperature: Float(temperature)),
-                context: context
-            ) { newTokens in
-                accumulated.append(contentsOf: newTokens)
-                let text = context.tokenizer.decode(tokens: accumulated,
-                                                    skipSpecialTokens: true)
-                DispatchQueue.main.async { onToken(text) }
-                return .more
+            let stream = try generate(input: input, parameters: params, context: context)
+            var text = ""
+            for await generation in stream {
+                if let chunk = generation.chunk {
+                    text += chunk
+                    DispatchQueue.main.async { onToken(text) }
+                }
             }
         }
     }
