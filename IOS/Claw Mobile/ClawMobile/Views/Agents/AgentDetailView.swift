@@ -250,9 +250,6 @@ struct AgentDetailView: View {
                     }
 
                     Button {
-                        UIApplication.shared.sendAction(
-                            #selector(UIResponder.resignFirstResponder),
-                            to: nil, from: nil, for: nil)
                         Task { await saveAgent() }
                     } label: {
                         HStack(spacing: 10) {

@@ -33,7 +33,15 @@ class AgentsViewModel: ObservableObject {
     func createAgent(_ agent: Agent) async -> Bool {
         // Check unique name
         if agents.contains(where: { $0.name.lowercased() == agent.name.lowercased() }) {
-            errorMessage = "An agent with this name already exists. Please choose a unique name."
+            errorMessage = "An agent with this name already exists."
+            return false
+        }
+
+        // Ensure token is fresh before mutating
+        await AuthService.shared.refreshTokenIfNeeded()
+
+        guard AuthService.shared.backendToken != nil else {
+            errorMessage = "Not authenticated. Please sign in again."
             return false
         }
 
@@ -51,7 +59,15 @@ class AgentsViewModel: ObservableObject {
     func updateAgent(_ agent: Agent) async -> Bool {
         // Check unique name (excluding self)
         if agents.contains(where: { $0.id != agent.id && $0.name.lowercased() == agent.name.lowercased() }) {
-            errorMessage = "An agent with this name already exists. Please choose a unique name."
+            errorMessage = "An agent with this name already exists."
+            return false
+        }
+
+        // Ensure token is fresh before mutating
+        await AuthService.shared.refreshTokenIfNeeded()
+
+        guard AuthService.shared.backendToken != nil else {
+            errorMessage = "Not authenticated. Please sign in again."
             return false
         }
 
@@ -78,6 +94,8 @@ class AgentsViewModel: ObservableObject {
     }
 
     func deleteAgent(_ agent: Agent) async -> Bool {
+        await AuthService.shared.refreshTokenIfNeeded()
+
         do {
             try await APIService.shared.deleteAgent(id: agent.id)
             agents.removeAll { $0.id == agent.id }
