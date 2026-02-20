@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		07056E972F489B7200A46D5E /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 07056E962F489B7200A46D5E /* MLXLLM */; };
 		25ED3E133CDF58BBA371C92A /* StorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6820BA6D65F61C488CCF546 /* StorageService.swift */; };
 		448A9B5A03BAAAEC3C41C74B /* ClawMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A678F652DD8E32241C716C8 /* ClawMobileApp.swift */; };
 		45A4AB5771484542363D6C2E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 17FD1065FC224C2E3553CB6B /* PrivacyInfo.xcprivacy */; };
@@ -88,6 +89,7 @@
 				GOOGLESIGNINFRAME1234567 /* GoogleSignIn in Frameworks */,
 				GOOGLESIGNINFRAME7654321 /* GoogleSignInSwift in Frameworks */,
 				962565B52DB5FCACC5C3EF7E /* MLX in Frameworks */,
+				07056E972F489B7200A46D5E /* MLXLLM in Frameworks */,
 				83EC1CDE487B47D7D4A759AC /* MLXNN in Frameworks */,
 				61E6B22DE6E1DE6AFC5279A7 /* MLXRandom in Frameworks */,
 				A2A7499744A9AD0F4AEBBDCA /* MLXFast in Frameworks */,
@@ -264,6 +266,7 @@
 				CD3C81DB1C20AE8011E1272B /* MLXFast */,
 				GOOGLESIGNINPROD12345678 /* GoogleSignIn */,
 				GOOGLESIGNINPROD87654321 /* GoogleSignInSwift */,
+				07056E962F489B7200A46D5E /* MLXLLM */,
 			);
 			productName = ClawMobile;
 			productReference = 983160E10F25DD387C86DE7C /* ClawMobile.app */;
@@ -292,6 +295,7 @@
 				282350D1DC7B41EA61D8E5AE /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				38E44A87D2E12780389B5485 /* XCRemoteSwiftPackageReference "mlx-swift" */,
 				GOOGLESIGNIN123456789ABC /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				07056E952F489B7200A46D5E /* XCRemoteSwiftPackageReference "mlx-swift-examples" */,
 			);
 			projectDirPath = "";
 			projectRoot = "";
@@ -548,6 +552,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		07056E952F489B7200A46D5E /* XCRemoteSwiftPackageReference "mlx-swift-examples" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-examples";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.29.1;
+			};
+		};
 		282350D1DC7B41EA61D8E5AE /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
@@ -575,6 +587,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		07056E962F489B7200A46D5E /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 07056E952F489B7200A46D5E /* XCRemoteSwiftPackageReference "mlx-swift-examples" */;
+			productName = MLXLLM;
+		};
 		5E4330F6A8C06AEEC6F9E161 /* MLXNN */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 38E44A87D2E12780389B5485 /* XCRemoteSwiftPackageReference "mlx-swift" */;

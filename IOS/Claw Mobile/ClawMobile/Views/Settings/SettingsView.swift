@@ -56,8 +56,13 @@ struct SettingsView: View {
                 } header: {
                     Text("On-Device Models (MLX)")
                 } footer: {
-                    Text("Models run entirely on your device. No data is sent to external servers.")
-                        .font(.caption2)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Models run entirely on your device. No data is sent to external servers.")
+                            .font(.caption2)
+                        Text("⚠️ On-device AI is recommended for iPhone 15 Pro or newer. Older devices may be slow or crash.")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                    }
                 }
                 .listRowBackground(Color.white.opacity(0.06))
 
@@ -138,6 +143,11 @@ struct ModelRow: View {
                     Text(model.sizeDescription)
                         .font(.caption)
                         .foregroundColor(.gray)
+                    if let warning = model.deviceWarning {
+                        Text(warning)
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                    }
                 }
                 Spacer()
 

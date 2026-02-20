@@ -2,6 +2,8 @@ import Foundation
 import MLX
 import MLXNN
 import MLXRandom
+import MLXLLM
+import MLXLMCommon
 
 /// Available on-device models for MLX inference
 struct MLXModelInfo: Identifiable, Hashable {
@@ -9,36 +11,41 @@ struct MLXModelInfo: Identifiable, Hashable {
     let name: String
     let huggingFaceRepo: String
     let sizeDescription: String
+    let deviceWarning: String?
 
     static let defaultModels: [MLXModelInfo] = [
         MLXModelInfo(
             id: "llama-3.2-1b",
             name: "Llama 3.2 1B Instruct",
             huggingFaceRepo: "mlx-community/Llama-3.2-1B-Instruct-4bit",
-            sizeDescription: "~700 MB"
+            sizeDescription: "~700 MB",
+            deviceWarning: "Recommended: iPhone 15 Pro or newer"
         ),
         MLXModelInfo(
             id: "llama-3.2-3b",
             name: "Llama 3.2 3B Instruct",
             huggingFaceRepo: "mlx-community/Llama-3.2-3B-Instruct-4bit",
-            sizeDescription: "~1.8 GB"
+            sizeDescription: "~1.8 GB",
+            deviceWarning: "Recommended: iPhone 15 Pro or newer"
         ),
         MLXModelInfo(
             id: "phi-3.5-mini",
             name: "Phi 3.5 Mini Instruct",
             huggingFaceRepo: "mlx-community/Phi-3.5-mini-instruct-4bit",
-            sizeDescription: "~2.2 GB"
+            sizeDescription: "~2.2 GB",
+            deviceWarning: "Recommended: iPhone 16 or newer"
         ),
         MLXModelInfo(
             id: "gemma-2-2b",
             name: "Gemma 2 2B Instruct",
             huggingFaceRepo: "mlx-community/gemma-2-2b-it-4bit",
-            sizeDescription: "~1.5 GB"
+            sizeDescription: "~1.5 GB",
+            deviceWarning: "Recommended: iPhone 15 Pro or newer"
         ),
     ]
 }
 
-/// Manages on-device LLM inference using MLX-Swift
+/// Manages on-device LLM inference using MLX-Swift + MLXLLM
 @MainActor
 class MLXService: ObservableObject {
     static let shared = MLXService()
@@ -56,109 +63,85 @@ class MLXService: ObservableObject {
         loadDownloadedModelsList()
     }
 
-    /// Directory where models are stored
-    var modelsDirectory: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let dir = docs.appendingPathComponent("mlx-models", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
+    // MARK: - Model State
 
-    /// Check if a model is downloaded
     func isModelDownloaded(_ modelInfo: MLXModelInfo) -> Bool {
         downloadedModels.contains(modelInfo.id)
     }
 
-    /// Get the local path for a model
-    func modelPath(for modelInfo: MLXModelInfo) -> URL {
-        modelsDirectory.appendingPathComponent(modelInfo.id, isDirectory: true)
-    }
+    // MARK: - Download
 
-    /// Download a model from HuggingFace Hub
+    /// Downloads the model via HuggingFace Hub (handled by MLXLLM internally).
+    /// Progress is reported through isDownloading / downloadProgress.
     func downloadModel(_ modelInfo: MLXModelInfo) async throws {
         isDownloading = true
         downloadProgress = 0
+        defer { isDownloading = false }
 
-        defer {
-            isDownloading = false
+        let configuration = ModelConfiguration(id: modelInfo.huggingFaceRepo)
+        let container = try await LLMModelFactory.shared.loadContainer(
+            configuration: configuration
+        ) { [weak self] progress in
+            Task { @MainActor [weak self] in
+                self?.downloadProgress = progress.fractionCompleted
+            }
         }
 
-        let destination = modelPath(for: modelInfo)
-        try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-
-        // Download model files from HuggingFace
-        let baseURL = "https://huggingface.co/\(modelInfo.huggingFaceRepo)/resolve/main"
-        let filesToDownload = [
-            "config.json",
-            "tokenizer.json",
-            "tokenizer_config.json",
-            "special_tokens_map.json",
-            "model.safetensors",
-            "model.safetensors.index.json",
-        ]
-
-        for (index, filename) in filesToDownload.enumerated() {
-            let fileURL = URL(string: "\(baseURL)/\(filename)")!
-            let destFile = destination.appendingPathComponent(filename)
-
-            if FileManager.default.fileExists(atPath: destFile.path) {
-                downloadProgress = Double(index + 1) / Double(filesToDownload.count)
-                continue
-            }
-
-            do {
-                let (tempURL, response) = try await URLSession.shared.download(from: fileURL)
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode) else {
-                    // Some files may not exist (e.g., index.json for small models), skip
-                    continue
-                }
-                try FileManager.default.moveItem(at: tempURL, to: destFile)
-            } catch {
-                // Non-critical files can be skipped
-                print("[MLXService] Skipping \(filename): \(error.localizedDescription)")
-            }
-
-            downloadProgress = Double(index + 1) / Double(filesToDownload.count)
-        }
-
+        modelContainer = container
+        currentModelId = modelInfo.id
+        isModelLoaded = true
         downloadedModels.insert(modelInfo.id)
         saveDownloadedModelsList()
         downloadProgress = 1.0
     }
 
-    /// Delete a downloaded model
-    func deleteModel(_ modelInfo: MLXModelInfo) throws {
-        if currentModelId == modelInfo.id {
-            unloadModel()
+    // MARK: - Load / Unload
+
+    /// Loads a previously downloaded model into memory.
+    func loadModel(_ modelInfo: MLXModelInfo) async throws {
+        isDownloading = true
+        downloadProgress = 0
+        defer { isDownloading = false }
+
+        let configuration = ModelConfiguration(id: modelInfo.huggingFaceRepo)
+        let container = try await LLMModelFactory.shared.loadContainer(
+            configuration: configuration
+        ) { [weak self] progress in
+            Task { @MainActor [weak self] in
+                self?.downloadProgress = progress.fractionCompleted
+            }
         }
-        let path = modelPath(for: modelInfo)
-        try FileManager.default.removeItem(at: path)
-        downloadedModels.remove(modelInfo.id)
+
+        modelContainer = container
+        currentModelId = modelInfo.id
+        isModelLoaded = true
+        downloadedModels.insert(modelInfo.id)
         saveDownloadedModelsList()
     }
 
-    /// Load a model for inference
-    func loadModel(_ modelInfo: MLXModelInfo) async throws {
-        guard isModelDownloaded(modelInfo) else {
-            throw MLXError.modelNotDownloaded
-        }
-
-        // For now, we set the model as current. Full MLX-LM loading
-        // requires the mlx-swift-lm package which provides ModelContainer.
-        // This is a placeholder that will be connected when building with Xcode.
-        currentModelId = modelInfo.id
-        isModelLoaded = true
-    }
-
-    /// Unload the current model
     func unloadModel() {
         modelContainer = nil
         isModelLoaded = false
         currentModelId = nil
     }
 
-    /// Generate a response from the loaded model
+    // MARK: - Delete
+
+    func deleteModel(_ modelInfo: MLXModelInfo) throws {
+        if currentModelId == modelInfo.id { unloadModel() }
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let safeRepo = modelInfo.huggingFaceRepo.replacingOccurrences(of: "/", with: "--")
+        let modelCache = caches.appendingPathComponent("huggingface/hub/models--\(safeRepo)")
+        if FileManager.default.fileExists(atPath: modelCache.path) {
+            try FileManager.default.removeItem(at: modelCache)
+        }
+        downloadedModels.remove(modelInfo.id)
+        saveDownloadedModelsList()
+    }
+
+    // MARK: - Inference
+
+    /// Generates a full response (non-streaming).
     func generate(
         systemPrompt: String,
         conversationHistory: [(role: String, content: String)],
@@ -166,52 +149,80 @@ class MLXService: ObservableObject {
         temperature: Double = 0.7,
         maxTokens: Int = 2048
     ) async throws -> String {
-        guard isModelLoaded else {
-            throw MLXError.modelNotLoaded
-        }
+        guard let container = modelContainer else { throw MLXError.modelNotLoaded }
 
         isGenerating = true
         defer { isGenerating = false }
 
-        // Build the prompt in chat format
-        var prompt = "<|begin_of_text|>"
-        prompt += "<|start_header_id|>system<|end_header_id|>\n\n\(systemPrompt)<|eot_id|>"
-
-        for msg in conversationHistory.suffix(20) {
-            let role = msg.role == "user" ? "user" : "assistant"
-            prompt += "<|start_header_id|>\(role)<|end_header_id|>\n\n\(msg.content)<|eot_id|>"
+        let messages = buildMessages(systemPrompt: systemPrompt,
+                                     history: conversationHistory,
+                                     userMessage: userMessage)
+        let result = try await container.perform { context in
+            let input = try await context.processor.prepare(
+                input: UserInput(prompt: .chat(messages))
+            )
+            return try MLXLMCommon.generate(
+                input: input,
+                parameters: GenerateParameters(temperature: Float(temperature),
+                                               maxTokens: maxTokens),
+                context: context
+            ) { _ in .more }
         }
-
-        prompt += "<|start_header_id|>user<|end_header_id|>\n\n\(userMessage)<|eot_id|>"
-        prompt += "<|start_header_id|>assistant<|end_header_id|>\n\n"
-
-        // Placeholder response until full MLX-LM integration is built in Xcode
-        // The actual inference pipeline requires ModelContainer from mlx-swift-lm
-        // which handles tokenization, KV-cache, and token generation
-        return "[MLX inference will be available after building with Xcode and mlx-swift-lm. Model: \(currentModelId ?? "none")]"
+        return result.output
     }
 
-    /// Generate with streaming callback
+    /// Generates a response with streaming token callbacks.
+    /// `onToken` receives the full accumulated text so far on each update.
     func generateStreaming(
         systemPrompt: String,
         conversationHistory: [(role: String, content: String)],
         userMessage: String,
         temperature: Double = 0.7,
         maxTokens: Int = 2048,
-        onToken: @escaping (String) -> Void
+        onToken: @escaping @Sendable (String) -> Void
     ) async throws {
-        let response = try await generate(
-            systemPrompt: systemPrompt,
-            conversationHistory: conversationHistory,
-            userMessage: userMessage,
-            temperature: temperature,
-            maxTokens: maxTokens
-        )
-        // Simulate streaming for now
-        for word in response.split(separator: " ") {
-            onToken(String(word) + " ")
-            try await Task.sleep(nanoseconds: 50_000_000)
+        guard let container = modelContainer else { throw MLXError.modelNotLoaded }
+
+        isGenerating = true
+        defer { isGenerating = false }
+
+        let messages = buildMessages(systemPrompt: systemPrompt,
+                                     history: conversationHistory,
+                                     userMessage: userMessage)
+        let _ = try await container.perform { context in
+            let input = try await context.processor.prepare(
+                input: UserInput(prompt: .chat(messages))
+            )
+            var accumulated: [Int] = []
+            return try MLXLMCommon.generate(
+                input: input,
+                parameters: GenerateParameters(temperature: Float(temperature),
+                                               maxTokens: maxTokens),
+                context: context
+            ) { newTokens in
+                accumulated.append(contentsOf: newTokens)
+                let text = context.tokenizer.decode(tokens: accumulated,
+                                                    skipSpecialTokens: true)
+                DispatchQueue.main.async { onToken(text) }
+                return .more
+            }
         }
+    }
+
+    // MARK: - Helpers
+
+    private func buildMessages(
+        systemPrompt: String,
+        history: [(role: String, content: String)],
+        userMessage: String
+    ) -> [[String: String]] {
+        var msgs: [[String: String]] = [["role": "system", "content": systemPrompt]]
+        for msg in history.suffix(20) {
+            msgs.append(["role": msg.role == "user" ? "user" : "assistant",
+                         "content": msg.content])
+        }
+        msgs.append(["role": "user", "content": userMessage])
+        return msgs
     }
 
     // MARK: - Persistence
@@ -228,13 +239,6 @@ class MLXService: ObservableObject {
             UserDefaults.standard.set(data, forKey: "downloadedModels")
         }
     }
-}
-
-// MARK: - Placeholder for mlx-swift-lm ModelContainer
-
-/// This will be replaced by the actual ModelContainer from mlx-swift-lm when building in Xcode
-class ModelContainer {
-    // Placeholder
 }
 
 // MARK: - Errors
