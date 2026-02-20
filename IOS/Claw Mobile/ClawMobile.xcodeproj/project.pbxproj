@@ -7,15 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		074B1E5F2F466A71004562D8 /* ic_launcher.png in Resources */ = {isa = PBXBuildFile; fileRef = 074B1E4F2F466A71004562D8 /* ic_launcher.png */; };
-		074B1E602F466A71004562D8 /* ic_launcher.png in Resources */ = {isa = PBXBuildFile; fileRef = 074B1E532F466A71004562D8 /* ic_launcher.png */; };
-		074B1E612F466A71004562D8 /* ic_launcher.png in Resources */ = {isa = PBXBuildFile; fileRef = 074B1E552F466A71004562D8 /* ic_launcher.png */; };
-		074B1E622F466A71004562D8 /* playstore.png in Resources */ = {isa = PBXBuildFile; fileRef = 074B1E5D2F466A71004562D8 /* playstore.png */; };
-		074B1E632F466A71004562D8 /* ic_launcher.png in Resources */ = {isa = PBXBuildFile; fileRef = 074B1E572F466A71004562D8 /* ic_launcher.png */; };
-		074B1E642F466A71004562D8 /* appstore-rounded.png in Resources */ = {isa = PBXBuildFile; fileRef = 074B1E5B2F466A71004562D8 /* appstore-rounded.png */; };
-		074B1E652F466A71004562D8 /* appstore.png in Resources */ = {isa = PBXBuildFile; fileRef = 074B1E5A2F466A71004562D8 /* appstore.png */; };
-		074B1E662F466A71004562D8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 074B1E5C2F466A71004562D8 /* Assets.xcassets */; };
-		074B1E672F466A71004562D8 /* ic_launcher.png in Resources */ = {isa = PBXBuildFile; fileRef = 074B1E512F466A71004562D8 /* ic_launcher.png */; };
 		25ED3E133CDF58BBA371C92A /* StorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6820BA6D65F61C488CCF546 /* StorageService.swift */; };
 		448A9B5A03BAAAEC3C41C74B /* ClawMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A678F652DD8E32241C716C8 /* ClawMobileApp.swift */; };
 		45A4AB5771484542363D6C2E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 17FD1065FC224C2E3553CB6B /* PrivacyInfo.xcprivacy */; };

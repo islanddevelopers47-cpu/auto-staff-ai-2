@@ -8,65 +8,167 @@ struct AgentDetailView: View {
     var isNew: Bool = false
 
     @State private var isSaving = false
+    @FocusState private var focusedField: Field?
+
+    enum Field {
+        case name, description, systemPrompt
+    }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Basic Info") {
-                    TextField("Agent Name", text: $agent.name)
-                        .foregroundColor(.white)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Basic Info Section
+                    sectionCard(title: "Basic Info") {
+                        VStack(spacing: 12) {
+                            TextField("Agent Name", text: $agent.name)
+                                .textFieldStyle(DarkTextFieldStyle())
+                                .focused($focusedField, equals: .name)
 
-                    TextField("Description (optional)", text: Binding(
-                        get: { agent.description ?? "" },
-                        set: { agent.description = $0.isEmpty ? nil : $0 }
-                    ))
-                    .foregroundColor(.white)
-                }
-                .listRowBackground(Color.white.opacity(0.06))
-
-                Section("System Prompt") {
-                    TextEditor(text: $agent.systemPrompt)
-                        .frame(minHeight: 120)
-                        .foregroundColor(.white)
-                        .scrollContentBackground(.hidden)
-                }
-                .listRowBackground(Color.white.opacity(0.06))
-
-                Section("Model") {
-                    Picker("Model", selection: $agent.modelName) {
-                        ForEach(MLXModelInfo.defaultModels) { model in
-                            Text(model.name)
-                                .tag(model.huggingFaceRepo)
+                            TextField("Description (optional)", text: Binding(
+                                get: { agent.description ?? "" },
+                                set: { agent.description = $0.isEmpty ? nil : $0 }
+                            ))
+                            .textFieldStyle(DarkTextFieldStyle())
+                            .focused($focusedField, equals: .description)
                         }
                     }
-                    .pickerStyle(.menu)
-                    .foregroundColor(.white)
 
-                    HStack {
-                        Text("Temperature")
+                    // System Prompt Section
+                    sectionCard(title: "System Prompt") {
+                        TextEditor(text: $agent.systemPrompt)
+                            .frame(minHeight: 120)
                             .foregroundColor(.white)
-                        Spacer()
-                        Text(String(format: "%.1f", agent.temperature))
-                            .foregroundColor(.orange)
+                            .scrollContentBackground(.hidden)
+                            .padding(8)
+                            .background(Color.white.opacity(0.08))
+                            .cornerRadius(8)
+                            .focused($focusedField, equals: .systemPrompt)
                     }
-                    Slider(value: $agent.temperature, in: 0...2, step: 0.1)
-                        .tint(.orange)
 
-                    HStack {
-                        Text("Max Tokens")
-                            .foregroundColor(.white)
-                        Spacer()
-                        Text("\(agent.maxTokens)")
-                            .foregroundColor(.orange)
+                    // Model Section
+                    sectionCard(title: "Model Settings") {
+                        VStack(spacing: 16) {
+                            // Model Picker
+                            HStack {
+                                Text("Model")
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Picker("", selection: $agent.modelName) {
+                                    ForEach(MLXModelInfo.defaultModels) { model in
+                                        Text(model.name)
+                                            .tag(model.huggingFaceRepo)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .tint(.orange)
+                            }
+
+                            Divider().background(Color.white.opacity(0.1))
+
+                            // Temperature - Custom slider with better touch
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("Temperature")
+                                        .foregroundColor(.white)
+                                    Spacer()
+                                    Text(String(format: "%.1f", agent.temperature))
+                                        .foregroundColor(.orange)
+                                        .fontWeight(.semibold)
+                                }
+
+                                // Custom temperature buttons for reliable interaction
+                                HStack(spacing: 12) {
+                                    temperatureButton(value: 0.0, label: "0")
+                                    temperatureButton(value: 0.5, label: "0.5")
+                                    temperatureButton(value: 0.7, label: "0.7")
+                                    temperatureButton(value: 1.0, label: "1.0")
+                                    temperatureButton(value: 1.5, label: "1.5")
+                                    temperatureButton(value: 2.0, label: "2.0")
+                                }
+                            }
+
+                            Divider().background(Color.white.opacity(0.1))
+
+                            // Max Tokens - Custom buttons for reliable interaction
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("Max Tokens")
+                                        .foregroundColor(.white)
+                                    Spacer()
+                                    Text("\(agent.maxTokens)")
+                                        .foregroundColor(.orange)
+                                        .fontWeight(.semibold)
+                                }
+
+                                HStack(spacing: 12) {
+                                    // Decrease button
+                                    Button {
+                                        if agent.maxTokens > 256 {
+                                            agent.maxTokens -= 256
+                                        }
+                                    } label: {
+                                        Image(systemName: "minus")
+                                            .font(.title2.bold())
+                                            .foregroundColor(.white)
+                                            .frame(width: 50, height: 44)
+                                            .background(Color.white.opacity(0.15))
+                                            .cornerRadius(8)
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    // Preset buttons
+                                    tokensButton(value: 1024)
+                                    tokensButton(value: 2048)
+                                    tokensButton(value: 4096)
+                                    tokensButton(value: 8192)
+
+                                    // Increase button
+                                    Button {
+                                        if agent.maxTokens < 8192 {
+                                            agent.maxTokens += 256
+                                        }
+                                    } label: {
+                                        Image(systemName: "plus")
+                                            .font(.title2.bold())
+                                            .foregroundColor(.white)
+                                            .frame(width: 50, height: 44)
+                                            .background(Color.white.opacity(0.15))
+                                            .cornerRadius(8)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
                     }
-                    Stepper("", value: $agent.maxTokens, in: 256...8192, step: 256)
-                        .labelsHidden()
-                }
-                .listRowBackground(Color.white.opacity(0.06))
 
-                if !isNew && !agent.isBuiltin {
-                    Section {
-                        Button(role: .destructive) {
+                    // Save Button - Large, prominent, always visible
+                    Button {
+                        focusedField = nil
+                        Task { await saveAgent() }
+                    } label: {
+                        HStack {
+                            if isSaving {
+                                ProgressView()
+                                    .tint(.white)
+                                    .padding(.trailing, 8)
+                            }
+                            Text(isSaving ? "Saving..." : "Save Agent")
+                                .fontWeight(.bold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(agent.name.isEmpty || isSaving ? Color.gray : Color.orange)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(agent.name.isEmpty || isSaving)
+                    .padding(.top, 8)
+
+                    // Delete button for existing agents
+                    if !isNew && !agent.isBuiltin {
+                        Button {
                             Task {
                                 if await agentsVM.deleteAgent(agent) {
                                     dismiss()
@@ -74,17 +176,20 @@ struct AgentDetailView: View {
                             }
                         } label: {
                             HStack {
-                                Spacer()
-                                Label("Delete Agent", systemImage: "trash")
-                                    .foregroundColor(.red)
-                                Spacer()
+                                Image(systemName: "trash")
+                                Text("Delete Agent")
                             }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.red.opacity(0.15))
+                            .foregroundColor(.red)
+                            .cornerRadius(12)
                         }
+                        .buttonStyle(.plain)
                     }
-                    .listRowBackground(Color.red.opacity(0.1))
                 }
+                .padding()
             }
-            .scrollContentBackground(.hidden)
             .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
             .navigationTitle(isNew ? "New Agent" : agent.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -95,30 +200,20 @@ struct AgentDetailView: View {
                             .foregroundColor(.gray)
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await saveAgent() }
-                    } label: {
-                        if isSaving {
-                            ProgressView().tint(.orange)
-                        } else {
-                            Text("Save")
-                                .fontWeight(.semibold)
-                                .foregroundColor(.orange)
-                        }
-                    }
-                    .disabled(agent.name.isEmpty || isSaving)
-                }
+            }
+            .onTapGesture {
+                focusedField = nil
             }
             .overlay {
                 if let error = agentsVM.errorMessage {
                     VStack {
                         Spacer()
                         Text(error)
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundColor(.white)
                             .padding()
-                            .background(Color.red.opacity(0.8))
+                            .frame(maxWidth: .infinity)
+                            .background(Color.red)
                             .cornerRadius(8)
                             .padding()
                             .onTapGesture {
@@ -128,6 +223,52 @@ struct AgentDetailView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Helper Views
+
+    @ViewBuilder
+    private func sectionCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.gray)
+
+            content()
+        }
+        .padding()
+        .background(Color.white.opacity(0.06))
+        .cornerRadius(12)
+    }
+
+    private func temperatureButton(value: Double, label: String) -> some View {
+        Button {
+            agent.temperature = value
+        } label: {
+            Text(label)
+                .font(.subheadline.bold())
+                .foregroundColor(abs(agent.temperature - value) < 0.05 ? .black : .white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .background(abs(agent.temperature - value) < 0.05 ? Color.orange : Color.white.opacity(0.15))
+                .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func tokensButton(value: Int) -> some View {
+        Button {
+            agent.maxTokens = value
+        } label: {
+            Text("\(value / 1000)K")
+                .font(.subheadline.bold())
+                .foregroundColor(agent.maxTokens == value ? .black : .white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(agent.maxTokens == value ? Color.orange : Color.white.opacity(0.15))
+                .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
     }
 
     private func saveAgent() async {
@@ -144,5 +285,17 @@ struct AgentDetailView: View {
             }
         }
         isSaving = false
+    }
+}
+
+// MARK: - Custom TextField Style
+
+struct DarkTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(12)
+            .background(Color.white.opacity(0.08))
+            .cornerRadius(8)
+            .foregroundColor(.white)
     }
 }
