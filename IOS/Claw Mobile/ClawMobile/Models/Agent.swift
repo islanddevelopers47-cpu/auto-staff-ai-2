@@ -93,7 +93,13 @@ struct Agent: Codable, Identifiable, Hashable {
     }
 
     static func == (lhs: Agent, rhs: Agent) -> Bool {
-        lhs.id == rhs.id
+        lhs.id == rhs.id &&
+        lhs.name == rhs.name &&
+        lhs.description == rhs.description &&
+        lhs.systemPrompt == rhs.systemPrompt &&
+        lhs.modelName == rhs.modelName &&
+        lhs.temperature == rhs.temperature &&
+        lhs.maxTokens == rhs.maxTokens
     }
 }
 
