@@ -58,11 +58,10 @@ struct AgentDetailView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("System Prompt")
                             .font(.caption).foregroundColor(.gray)
-                        TextEditor(text: $agent.systemPrompt)
-                            .frame(height: 110)
+                        TextField("You are a helpful assistant...", text: $agent.systemPrompt, axis: .vertical)
+                            .lineLimit(5...10)
                             .foregroundColor(.white)
-                            .scrollContentBackground(.hidden)
-                            .padding(10)
+                            .padding(12)
                             .background(Color.white.opacity(0.08))
                             .cornerRadius(10)
                     }

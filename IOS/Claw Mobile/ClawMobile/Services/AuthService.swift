@@ -151,7 +151,7 @@ class AuthService: ObservableObject {
     // MARK: - Refresh Token
 
     func refreshTokenIfNeeded() async {
-        guard let user = firebaseUser else { return }
+        guard backendToken == nil, let user = firebaseUser else { return }
         await exchangeToken(user: user)
     }
 
