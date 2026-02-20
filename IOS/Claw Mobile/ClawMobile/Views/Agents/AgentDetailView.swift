@@ -13,8 +13,7 @@ struct AgentDetailView: View {
     private let bgColor = Color(red: 0.08, green: 0.04, blue: 0.12)
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
                 VStack(spacing: 0) {
 
                     // ── NAME ─────────────────────────────────────────────
@@ -210,13 +209,12 @@ struct AgentDetailView: View {
                 }
                 .background(bgColor)
             }
-            .navigationTitle(isNew ? "New Agent" : agent.name)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if isNew {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Cancel") { dismiss() }.foregroundColor(.gray)
-                    }
+        .navigationTitle(isNew ? "New Agent" : agent.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if isNew {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }.foregroundColor(.gray)
                 }
             }
         }

@@ -73,8 +73,10 @@ struct AgentsListView: View {
                 await agentsVM.loadAgents()
             }
             .sheet(isPresented: $showCreateSheet) {
-                AgentDetailView(agent: Agent.new(), isNew: true)
-                    .environmentObject(agentsVM)
+                NavigationStack {
+                    AgentDetailView(agent: Agent.new(), isNew: true)
+                        .environmentObject(agentsVM)
+                }
             }
             .alert("Delete Agent", isPresented: .init(
                 get: { agentToDelete != nil },
