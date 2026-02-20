@@ -132,7 +132,7 @@ class APIService {
     private func get(_ path: String) async throws -> Data {
         var request = makeRequest(path: path, method: "GET")
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data, path: path)
         return data
     }
@@ -140,7 +140,7 @@ class APIService {
     private func post(_ path: String, body: [String: Any]) async throws -> Data {
         var request = makeRequest(path: path, method: "POST")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data, path: path)
         return data
     }
@@ -148,17 +148,24 @@ class APIService {
     private func patch(_ path: String, body: [String: Any]) async throws -> Data {
         var request = makeRequest(path: path, method: "PATCH")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data, path: path)
         return data
     }
 
     private func delete(_ path: String) async throws -> Data {
         let request = makeRequest(path: path, method: "DELETE")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data, path: path)
         return data
     }
+
+    private var session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 20
+        config.timeoutIntervalForResource = 30
+        return URLSession(configuration: config)
+    }()
 
     private func makeRequest(path: String, method: String) -> URLRequest {
         let url = URL(string: "\(baseURL)\(path)")!
