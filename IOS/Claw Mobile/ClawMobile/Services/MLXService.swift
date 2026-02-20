@@ -163,8 +163,8 @@ class MLXService: ObservableObject {
             )
             return try MLXLMCommon.generate(
                 input: input,
-                parameters: GenerateParameters(temperature: Float(temperature),
-                                               maxTokens: maxTokens),
+                parameters: GenerateParameters(maxTokens: maxTokens,
+                                               temperature: Float(temperature)),
                 context: context
             ) { _ in .more }
         }
@@ -196,8 +196,8 @@ class MLXService: ObservableObject {
             var accumulated: [Int] = []
             return try MLXLMCommon.generate(
                 input: input,
-                parameters: GenerateParameters(temperature: Float(temperature),
-                                               maxTokens: maxTokens),
+                parameters: GenerateParameters(maxTokens: maxTokens,
+                                               temperature: Float(temperature)),
                 context: context
             ) { newTokens in
                 accumulated.append(contentsOf: newTokens)
@@ -216,14 +216,14 @@ class MLXService: ObservableObject {
         history: [(role: String, content: String)],
         userMessage: String
     ) -> [Chat.Message] {
-        var msgs: [Chat.Message] = [Chat.Message(role: "system", content: systemPrompt)]
+        var msgs: [Chat.Message] = [Chat.Message(role: .system, content: systemPrompt)]
         for msg in history.suffix(20) {
             msgs.append(Chat.Message(
-                role: msg.role == "user" ? "user" : "assistant",
+                role: msg.role == "user" ? .user : .assistant,
                 content: msg.content
             ))
         }
-        msgs.append(Chat.Message(role: "user", content: userMessage))
+        msgs.append(Chat.Message(role: .user, content: userMessage))
         return msgs
     }
 
