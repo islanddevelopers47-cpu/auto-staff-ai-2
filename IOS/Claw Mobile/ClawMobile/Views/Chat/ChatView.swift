@@ -147,6 +147,8 @@ struct ChatView: View {
             }
             .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
             .navigationTitle("Chat")
+            .toolbarBackground(Color(red: 0.08, green: 0.04, blue: 0.12), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .sheet(isPresented: $showAgentPicker) {
                 AgentPickerSheet(agents: agentsVM.agents) { agent in
                     chatVM.selectAgent(agent)
@@ -171,6 +173,7 @@ struct ChatView: View {
                 }
             }
         }
+        .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
     }
 
     private func sendMessage() {
