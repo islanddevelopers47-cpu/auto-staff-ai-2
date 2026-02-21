@@ -42,6 +42,7 @@ struct MainTabView: View {
                 }
         }
         .tint(.orange)
+        .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
         .task {
             await agentsVM.loadAgents()
         }
