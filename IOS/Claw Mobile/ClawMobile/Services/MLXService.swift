@@ -162,7 +162,7 @@ class MLXService: ObservableObject {
             let input = try await context.processor.prepare(
                 input: UserInput(chat: messages)
             )
-            let stream = try generate(input: input, parameters: params, context: context)
+            let stream = try generate(input: input, cache: nil, parameters: params, context: context)
             var result = ""
             for await generation in stream {
                 if let chunk = generation.chunk { result += chunk }
@@ -194,7 +194,7 @@ class MLXService: ObservableObject {
             let input = try await context.processor.prepare(
                 input: UserInput(chat: messages)
             )
-            let stream = try generate(input: input, parameters: params, context: context)
+            let stream = try generate(input: input, cache: nil, parameters: params, context: context)
             var text = ""
             for await generation in stream {
                 if let chunk = generation.chunk {
