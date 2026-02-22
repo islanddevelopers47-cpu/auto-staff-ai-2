@@ -17,8 +17,26 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
+private let appBackground = UIColor(red: 0.08, green: 0.04, blue: 0.12, alpha: 1.0)
+
 @main
 struct ClawMobileApp: App {
+    init() {
+        let navAppearance = UINavigationBarAppearance()
+        navAppearance.configureWithOpaqueBackground()
+        navAppearance.backgroundColor = appBackground
+        navAppearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+        navAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+        UINavigationBar.appearance().standardAppearance = navAppearance
+        UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
+        UINavigationBar.appearance().compactAppearance = navAppearance
+
+        let tabAppearance = UITabBarAppearance()
+        tabAppearance.configureWithOpaqueBackground()
+        tabAppearance.backgroundColor = appBackground
+        UITabBar.appearance().standardAppearance = tabAppearance
+        UITabBar.appearance().scrollEdgeAppearance = tabAppearance
+    }
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var authViewModel = AuthViewModel()
 
@@ -27,6 +45,7 @@ struct ClawMobileApp: App {
             ContentView()
                 .environmentObject(authViewModel)
                 .preferredColorScheme(.dark)
+                .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }
