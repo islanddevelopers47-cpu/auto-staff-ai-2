@@ -1,46 +1,5 @@
 import SwiftUI
 
-// MARK: - Cloud Model Info
-
-struct CloudModelInfo: Identifiable {
-    let id: String
-    let name: String
-    let provider: String
-    let description: String
-    let contextWindow: String
-
-    static let availableModels: [CloudModelInfo] = [
-        CloudModelInfo(
-            id: "gpt-4o",
-            name: "GPT-4o",
-            provider: "OpenAI",
-            description: "Most capable multimodal model",
-            contextWindow: "128k tokens"
-        ),
-        CloudModelInfo(
-            id: "gpt-4o-mini",
-            name: "GPT-4o Mini",
-            provider: "OpenAI",
-            description: "Fast and affordable",
-            contextWindow: "128k tokens"
-        ),
-        CloudModelInfo(
-            id: "gpt-4-turbo",
-            name: "GPT-4 Turbo",
-            provider: "OpenAI",
-            description: "High-intelligence, cost-effective",
-            contextWindow: "128k tokens"
-        ),
-        CloudModelInfo(
-            id: "gpt-3.5-turbo",
-            name: "GPT-3.5 Turbo",
-            provider: "OpenAI",
-            description: "Fast and lightweight",
-            contextWindow: "16k tokens"
-        ),
-    ]
-}
-
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var mlxService = MLXService.shared
@@ -138,19 +97,6 @@ struct SettingsView: View {
                     Text("API Keys")
                 } footer: {
                     Text("Add your OpenAI (or other provider) API key to use cloud agents via Railway.")
-                        .font(.caption2)
-                }
-                .listRowBackground(Color.white.opacity(0.06))
-
-                // Cloud Models Section
-                Section {
-                    ForEach(CloudModelInfo.availableModels) { model in
-                        CloudModelRow(model: model)
-                    }
-                } header: {
-                    Text("Cloud Models (Railway)")
-                } footer: {
-                    Text("Cloud models run on the Railway backend. An internet connection and valid API key are required.")
                         .font(.caption2)
                 }
                 .listRowBackground(Color.white.opacity(0.06))
@@ -343,42 +289,6 @@ struct AddApiKeySheet: View {
     }
 }
 
-// MARK: - Cloud Model Row
-
-struct CloudModelRow: View {
-    let model: CloudModelInfo
-
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(model.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                    Text(model.provider)
-                        .font(.caption2)
-                        .foregroundColor(.blue)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.15))
-                        .cornerRadius(4)
-                }
-                Text(model.description)
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                Text(model.contextWindow)
-                    .font(.caption2)
-                    .foregroundColor(Color(white: 0.5))
-            }
-            Spacer()
-            Image(systemName: "cloud.fill")
-                .font(.caption)
-                .foregroundColor(.blue.opacity(0.7))
-        }
-        .padding(.vertical, 4)
-    }
-}
 
 // MARK: - Model Row
 

@@ -9,6 +9,31 @@ struct AgentDetailView: View {
 
     @State private var isSaving = false
     @State private var saveError: String?
+    @State private var selectedProvider: String = "openai"
+
+    private let cloudProviders: [(id: String, label: String, icon: String, models: [(id: String, label: String)])] = [
+        (id: "openai",    label: "OpenAI",    icon: "cloud.fill",  models: [
+            (id: "gpt-4o",       label: "GPT-4o"),
+            (id: "gpt-4o-mini",  label: "GPT-4o Mini"),
+            (id: "gpt-4-turbo",  label: "GPT-4 Turbo"),
+            (id: "gpt-3.5-turbo",label: "GPT-3.5 Turbo"),
+        ]),
+        (id: "anthropic", label: "Anthropic", icon: "cloud.fill",  models: [
+            (id: "claude-opus-4-5",         label: "Claude Opus 4.5"),
+            (id: "claude-sonnet-4-5",       label: "Claude Sonnet 4.5"),
+            (id: "claude-haiku-3-5",        label: "Claude Haiku 3.5"),
+        ]),
+        (id: "google",    label: "Gemini",    icon: "cloud.fill",  models: [
+            (id: "gemini-2.0-flash",         label: "Gemini 2.0 Flash"),
+            (id: "gemini-1.5-pro",           label: "Gemini 1.5 Pro"),
+            (id: "gemini-1.5-flash",         label: "Gemini 1.5 Flash"),
+        ]),
+        (id: "grok",      label: "Grok",      icon: "cloud.fill",  models: [
+            (id: "grok-3",       label: "Grok 3"),
+            (id: "grok-3-mini",  label: "Grok 3 Mini"),
+            (id: "grok-2",       label: "Grok 2"),
+        ]),
+    ]
 
     private let bgColor = Color(red: 0.08, green: 0.04, blue: 0.12)
 
@@ -69,27 +94,94 @@ struct AgentDetailView: View {
                     Divider().background(Color.white.opacity(0.1)).padding(.horizontal)
 
                     // ── MODEL ─────────────────────────────────────────────
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Model").font(.caption).foregroundColor(.gray)
-                        ForEach(MLXModelInfo.defaultModels) { model in
-                            Button {
-                                agent.modelName = model.huggingFaceRepo
-                            } label: {
-                                HStack {
-                                    Text(model.name)
-                                        .foregroundColor(.white).font(.subheadline)
-                                    Spacer()
-                                    if agent.modelName == model.huggingFaceRepo {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.orange)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Provider").font(.caption).foregroundColor(.gray)
+
+                        // Provider tabs
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                // Cloud providers
+                                ForEach(cloudProviders, id: \.id) { provider in
+                                    Button {
+                                        selectedProvider = provider.id
+                                        agent.modelProvider = provider.id
+                                        agent.modelName = provider.models.first?.id ?? ""
+                                    } label: {
+                                        Text(provider.label)
+                                            .font(.subheadline.bold())
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 8)
+                                            .background(selectedProvider == provider.id
+                                                ? Color.orange : Color.white.opacity(0.08))
+                                            .foregroundColor(selectedProvider == provider.id ? .black : .white)
+                                            .cornerRadius(20)
                                     }
+                                    .buttonStyle(.plain)
                                 }
-                                .padding(12)
-                                .background(agent.modelName == model.huggingFaceRepo
-                                    ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
-                                .cornerRadius(10)
+                                // MLX on-device
+                                Button {
+                                    selectedProvider = "mlx"
+                                    agent.modelProvider = "mlx"
+                                    agent.modelName = MLXModelInfo.defaultModels.first?.huggingFaceRepo ?? ""
+                                } label: {
+                                    Text("On-Device")
+                                        .font(.subheadline.bold())
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 8)
+                                        .background(selectedProvider == "mlx"
+                                            ? Color.purple : Color.white.opacity(0.08))
+                                        .foregroundColor(.white)
+                                        .cornerRadius(20)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.horizontal, 1)
+                        }
+
+                        // Model list for selected provider
+                        Text("Model").font(.caption).foregroundColor(.gray)
+
+                        if selectedProvider == "mlx" {
+                            ForEach(MLXModelInfo.defaultModels) { model in
+                                Button {
+                                    agent.modelName = model.huggingFaceRepo
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(model.name).foregroundColor(.white).font(.subheadline)
+                                            Text("On-device · \(model.size)").font(.caption).foregroundColor(.gray)
+                                        }
+                                        Spacer()
+                                        if agent.modelName == model.huggingFaceRepo {
+                                            Image(systemName: "checkmark.circle.fill").foregroundColor(.purple)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .background(agent.modelName == model.huggingFaceRepo
+                                        ? Color.purple.opacity(0.15) : Color.white.opacity(0.06))
+                                    .cornerRadius(10)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        } else if let provider = cloudProviders.first(where: { $0.id == selectedProvider }) {
+                            ForEach(provider.models, id: \.id) { model in
+                                Button {
+                                    agent.modelName = model.id
+                                } label: {
+                                    HStack {
+                                        Text(model.label).foregroundColor(.white).font(.subheadline)
+                                        Spacer()
+                                        if agent.modelName == model.id {
+                                            Image(systemName: "checkmark.circle.fill").foregroundColor(.orange)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .background(agent.modelName == model.id
+                                        ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
+                                    .cornerRadius(10)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
                     .padding(.horizontal).padding(.vertical, 12)
@@ -181,6 +273,9 @@ struct AgentDetailView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(bgColor.ignoresSafeArea())
+            .onAppear {
+                selectedProvider = agent.modelProvider.isEmpty ? "openai" : agent.modelProvider
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 0) {
                     if let err = saveError {
@@ -223,7 +318,7 @@ struct AgentDetailView: View {
     private func saveAgent() async {
         saveError = nil
         isSaving = true
-        agent.modelProvider = "mlx"
+        agent.modelProvider = selectedProvider
 
         if isNew {
             if await agentsVM.createAgent(agent) {
