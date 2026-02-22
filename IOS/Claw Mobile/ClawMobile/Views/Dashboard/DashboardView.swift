@@ -43,7 +43,6 @@ struct DashboardView: View {
                     Spacer()
                 }
                 .padding(.top)
-            }
         }
         .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
         .navigationTitle("Dashboard")
