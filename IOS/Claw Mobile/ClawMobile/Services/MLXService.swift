@@ -199,7 +199,8 @@ class MLXService: ObservableObject {
             for await generation in stream {
                 if let chunk = generation.chunk {
                     text += chunk
-                    DispatchQueue.main.async { onToken(text) }
+                    let snapshot = text
+                    DispatchQueue.main.async { onToken(snapshot) }
                 }
             }
         }

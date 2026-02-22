@@ -96,93 +96,9 @@ struct AgentDetailView: View {
                     // ── MODEL ─────────────────────────────────────────────
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Provider").font(.caption).foregroundColor(.gray)
-
-                        // Provider tabs
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                // Cloud providers
-                                ForEach(cloudProviders, id: \.id) { provider in
-                                    Button {
-                                        selectedProvider = provider.id
-                                        agent.modelProvider = provider.id
-                                        agent.modelName = provider.models.first?.id ?? ""
-                                    } label: {
-                                        Text(provider.label)
-                                            .font(.subheadline.bold())
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 8)
-                                            .background(selectedProvider == provider.id
-                                                ? Color.orange : Color.white.opacity(0.08))
-                                            .foregroundColor(selectedProvider == provider.id ? .black : .white)
-                                            .cornerRadius(20)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                // MLX on-device
-                                Button {
-                                    selectedProvider = "mlx"
-                                    agent.modelProvider = "mlx"
-                                    agent.modelName = MLXModelInfo.defaultModels.first?.huggingFaceRepo ?? ""
-                                } label: {
-                                    Text("On-Device")
-                                        .font(.subheadline.bold())
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 8)
-                                        .background(selectedProvider == "mlx"
-                                            ? Color.purple : Color.white.opacity(0.08))
-                                        .foregroundColor(.white)
-                                        .cornerRadius(20)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            .padding(.horizontal, 1)
-                        }
-
-                        // Model list for selected provider
+                        providerTabsView
                         Text("Model").font(.caption).foregroundColor(.gray)
-
-                        if selectedProvider == "mlx" {
-                            ForEach(MLXModelInfo.defaultModels) { model in
-                                Button {
-                                    agent.modelName = model.huggingFaceRepo
-                                } label: {
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(model.name).foregroundColor(.white).font(.subheadline)
-                                            Text("On-device · \(model.size)").font(.caption).foregroundColor(.gray)
-                                        }
-                                        Spacer()
-                                        if agent.modelName == model.huggingFaceRepo {
-                                            Image(systemName: "checkmark.circle.fill").foregroundColor(.purple)
-                                        }
-                                    }
-                                    .padding(12)
-                                    .background(agent.modelName == model.huggingFaceRepo
-                                        ? Color.purple.opacity(0.15) : Color.white.opacity(0.06))
-                                    .cornerRadius(10)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        } else if let provider = cloudProviders.first(where: { $0.id == selectedProvider }) {
-                            ForEach(provider.models, id: \.id) { model in
-                                Button {
-                                    agent.modelName = model.id
-                                } label: {
-                                    HStack {
-                                        Text(model.label).foregroundColor(.white).font(.subheadline)
-                                        Spacer()
-                                        if agent.modelName == model.id {
-                                            Image(systemName: "checkmark.circle.fill").foregroundColor(.orange)
-                                        }
-                                    }
-                                    .padding(12)
-                                    .background(agent.modelName == model.id
-                                        ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
-                                    .cornerRadius(10)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
+                        modelListView
                     }
                     .padding(.horizontal).padding(.vertical, 12)
 
@@ -311,6 +227,89 @@ struct AgentDetailView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }.foregroundColor(.gray)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var providerTabsView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(cloudProviders, id: \.id) { provider in
+                    Button {
+                        selectedProvider = provider.id
+                        agent.modelProvider = provider.id
+                        agent.modelName = provider.models.first?.id ?? ""
+                    } label: {
+                        Text(provider.label)
+                            .font(.subheadline.bold())
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(selectedProvider == provider.id ? Color.orange : Color.white.opacity(0.08))
+                            .foregroundColor(selectedProvider == provider.id ? .black : .white)
+                            .cornerRadius(20)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button {
+                    selectedProvider = "mlx"
+                    agent.modelProvider = "mlx"
+                    agent.modelName = MLXModelInfo.defaultModels.first?.huggingFaceRepo ?? ""
+                } label: {
+                    Text("On-Device")
+                        .font(.subheadline.bold())
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(selectedProvider == "mlx" ? Color.purple : Color.white.opacity(0.08))
+                        .foregroundColor(.white)
+                        .cornerRadius(20)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 1)
+        }
+    }
+
+    @ViewBuilder
+    private var modelListView: some View {
+        if selectedProvider == "mlx" {
+            ForEach(MLXModelInfo.defaultModels) { model in
+                Button {
+                    agent.modelName = model.huggingFaceRepo
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.name).foregroundColor(.white).font(.subheadline)
+                            Text("On-device · \(model.size)").font(.caption).foregroundColor(.gray)
+                        }
+                        Spacer()
+                        if agent.modelName == model.huggingFaceRepo {
+                            Image(systemName: "checkmark.circle.fill").foregroundColor(.purple)
+                        }
+                    }
+                    .padding(12)
+                    .background(agent.modelName == model.huggingFaceRepo ? Color.purple.opacity(0.15) : Color.white.opacity(0.06))
+                    .cornerRadius(10)
+                }
+                .buttonStyle(.plain)
+            }
+        } else if let provider = cloudProviders.first(where: { $0.id == selectedProvider }) {
+            ForEach(provider.models, id: \.id) { model in
+                Button {
+                    agent.modelName = model.id
+                } label: {
+                    HStack {
+                        Text(model.label).foregroundColor(.white).font(.subheadline)
+                        Spacer()
+                        if agent.modelName == model.id {
+                            Image(systemName: "checkmark.circle.fill").foregroundColor(.orange)
+                        }
+                    }
+                    .padding(12)
+                    .background(agent.modelName == model.id ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
+                    .cornerRadius(10)
+                }
+                .buttonStyle(.plain)
             }
         }
     }

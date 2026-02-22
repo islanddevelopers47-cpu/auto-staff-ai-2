@@ -96,7 +96,6 @@ class ProjectsViewModel: ObservableObject {
         isSending = true
 
         // Parse @mentions from content
-        let mentionPattern = /@(\w+)/
         var mentions: [String] = []
         if let regex = try? NSRegularExpression(pattern: "@(\\w+)", options: []) {
             let nsContent = content as NSString
