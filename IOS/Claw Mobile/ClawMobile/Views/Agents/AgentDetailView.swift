@@ -273,44 +273,52 @@ struct AgentDetailView: View {
     @ViewBuilder
     private var modelListView: some View {
         if selectedProvider == "mlx" {
-            ForEach(MLXModelInfo.defaultModels) { model in
-                Button {
-                    agent.modelName = model.huggingFaceRepo
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(model.name).foregroundColor(.white).font(.subheadline)
-                            Text("On-device · \(model.size)").font(.caption).foregroundColor(.gray)
-                        }
-                        Spacer()
-                        if agent.modelName == model.huggingFaceRepo {
-                            Image(systemName: "checkmark.circle.fill").foregroundColor(.purple)
-                        }
-                    }
-                    .padding(12)
-                    .background(agent.modelName == model.huggingFaceRepo ? Color.purple.opacity(0.15) : Color.white.opacity(0.06))
-                    .cornerRadius(10)
-                }
-                .buttonStyle(.plain)
-            }
+            mlxModelListView
         } else if let provider = cloudProviders.first(where: { $0.id == selectedProvider }) {
-            ForEach(provider.models, id: \.id) { model in
-                Button {
-                    agent.modelName = model.id
-                } label: {
-                    HStack {
-                        Text(model.label).foregroundColor(.white).font(.subheadline)
-                        Spacer()
-                        if agent.modelName == model.id {
-                            Image(systemName: "checkmark.circle.fill").foregroundColor(.orange)
-                        }
+            cloudModelListView(for: provider)
+        }
+    }
+
+    @ViewBuilder
+    private var mlxModelListView: some View {
+        ForEach(MLXModelInfo.defaultModels) { model in
+            let isSelected = agent.modelName == model.huggingFaceRepo
+            Button { agent.modelName = model.huggingFaceRepo } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.name).foregroundColor(.white).font(.subheadline)
+                        Text("On-device · \(model.size)").font(.caption).foregroundColor(.gray)
                     }
-                    .padding(12)
-                    .background(agent.modelName == model.id ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
-                    .cornerRadius(10)
+                    Spacer()
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(.purple)
+                    }
                 }
-                .buttonStyle(.plain)
+                .padding(12)
+                .background(isSelected ? Color.purple.opacity(0.15) : Color.white.opacity(0.06))
+                .cornerRadius(10)
             }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private func cloudModelListView(for provider: (id: String, label: String, icon: String, models: [(id: String, label: String)])) -> some View {
+        ForEach(provider.models, id: \.id) { model in
+            let isSelected = agent.modelName == model.id
+            Button { agent.modelName = model.id } label: {
+                HStack {
+                    Text(model.label).foregroundColor(.white).font(.subheadline)
+                    Spacer()
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(.orange)
+                    }
+                }
+                .padding(12)
+                .background(isSelected ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
+                .cornerRadius(10)
+            }
+            .buttonStyle(.plain)
         }
     }
 
