@@ -25,14 +25,27 @@ private struct NavBackgroundFixVC: UIViewControllerRepresentable {
         }
 
         private func applyBackground() {
+            // Walk every ancestor VC and set its view background to purple
             var vc: UIViewController? = self
             while let current = vc {
                 current.view.backgroundColor = color
-                if current is UINavigationController { break }
                 vc = current.parent
             }
-            // Also fix the window itself
+            // Fix the window itself
             view.window?.backgroundColor = color
+            // Fix every subview of the window's root that has a black background
+            if let root = view.window?.rootViewController {
+                paintViews(root.view)
+            }
+        }
+
+        private func paintViews(_ view: UIView) {
+            if view.backgroundColor == .black || view.backgroundColor == UIColor(white: 0, alpha: 1) {
+                view.backgroundColor = color
+            }
+            for sub in view.subviews {
+                paintViews(sub)
+            }
         }
     }
 }
