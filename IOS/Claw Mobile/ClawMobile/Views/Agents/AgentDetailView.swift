@@ -282,44 +282,54 @@ struct AgentDetailView: View {
     @ViewBuilder
     private var mlxModelListView: some View {
         ForEach(MLXModelInfo.defaultModels) { model in
-            let isSelected = agent.modelName == model.huggingFaceRepo
-            Button { agent.modelName = model.huggingFaceRepo } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(model.name).foregroundColor(.white).font(.subheadline)
-                        Text("On-device · \(model.size)").font(.caption).foregroundColor(.gray)
-                    }
-                    Spacer()
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill").foregroundColor(.purple)
-                    }
-                }
-                .padding(12)
-                .background(isSelected ? Color.purple.opacity(0.15) : Color.white.opacity(0.06))
-                .cornerRadius(10)
-            }
-            .buttonStyle(.plain)
+            mlxModelRow(model: model)
         }
+    }
+
+    @ViewBuilder
+    private func mlxModelRow(model: MLXModelInfo) -> some View {
+        let isSelected = agent.modelName == model.huggingFaceRepo
+        Button { agent.modelName = model.huggingFaceRepo } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.name).foregroundColor(.white).font(.subheadline)
+                    Text("On-device · \(model.size)").font(.caption).foregroundColor(.gray)
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.purple)
+                }
+            }
+            .padding(12)
+            .background(isSelected ? Color.purple.opacity(0.15) : Color.white.opacity(0.06))
+            .cornerRadius(10)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
     private func cloudModelListView(for provider: (id: String, label: String, icon: String, models: [(id: String, label: String)])) -> some View {
         ForEach(provider.models, id: \.id) { model in
-            let isSelected = agent.modelName == model.id
-            Button { agent.modelName = model.id } label: {
-                HStack {
-                    Text(model.label).foregroundColor(.white).font(.subheadline)
-                    Spacer()
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill").foregroundColor(.orange)
-                    }
-                }
-                .padding(12)
-                .background(isSelected ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
-                .cornerRadius(10)
-            }
-            .buttonStyle(.plain)
+            cloudModelRow(id: model.id, label: model.label)
         }
+    }
+
+    @ViewBuilder
+    private func cloudModelRow(id: String, label: String) -> some View {
+        let isSelected = agent.modelName == id
+        Button { agent.modelName = id } label: {
+            HStack {
+                Text(label).foregroundColor(.white).font(.subheadline)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.orange)
+                }
+            }
+            .padding(12)
+            .background(isSelected ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
+            .cornerRadius(10)
+        }
+        .buttonStyle(.plain)
     }
 
     private func saveAgent() async {
