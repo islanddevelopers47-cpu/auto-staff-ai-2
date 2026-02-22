@@ -23,9 +23,7 @@ struct MainTabView: View {
     ]
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            bgColor.ignoresSafeArea()
-
+        VStack(spacing: 0) {
             // Single NavigationStack for the whole app — no per-tab UINavigationController
             NavigationStack {
                 Group {
@@ -61,9 +59,10 @@ struct MainTabView: View {
                         .environmentObject(agentsVM)
                 }
             }
-            .background(bgColor.ignoresSafeArea())
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(bgColor)
 
-            // Custom tab bar
+            // Custom tab bar — sits below content, above home indicator
             VStack(spacing: 0) {
                 Divider().background(Color.white.opacity(0.12))
                 HStack(spacing: 0) {
@@ -85,15 +84,10 @@ struct MainTabView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .background(bgColor)
-                // Cover home indicator area
-                Rectangle()
-                    .fill(bgColor)
-                    .frame(height: 0)
             }
             .background(bgColor.ignoresSafeArea(edges: .bottom))
         }
-        .ignoresSafeArea(edges: .bottom)
+        .background(bgColor.ignoresSafeArea())
         .task {
             await agentsVM.loadAgents()
         }
