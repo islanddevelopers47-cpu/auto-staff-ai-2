@@ -292,7 +292,7 @@ struct AgentDetailView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.name).foregroundColor(.white).font(.subheadline)
-                    Text("On-device · \(model.size)").font(.caption).foregroundColor(.gray)
+                    Text("On-device · \(model.sizeDescription)").font(.caption).foregroundColor(.gray)
                 }
                 Spacer()
                 if isSelected {
