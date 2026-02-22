@@ -88,6 +88,31 @@ class APIService {
         return try JSONDecoder().decode(ChatResponse.self, from: data)
     }
 
+    // MARK: - API Keys
+
+    func fetchApiKeys() async throws -> [UserApiKey] {
+        let data = try await get("/api-keys")
+        let response = try JSONDecoder().decode(ApiKeysResponse.self, from: data)
+        return response.keys
+    }
+
+    func saveApiKey(provider: String, apiKey: String, label: String? = nil) async throws {
+        var body: [String: Any] = ["provider": provider, "apiKey": apiKey]
+        if let label { body["label"] = label }
+        _ = try await post("/api-keys", body: body)
+    }
+
+    func deleteApiKey(id: String) async throws {
+        _ = try await delete("/api-keys/\(id)")
+    }
+
+    func testApiKey(provider: String, apiKey: String) async throws -> Bool {
+        let body: [String: Any] = ["provider": provider, "apiKey": apiKey]
+        let data = try await post("/api-keys/test", body: body)
+        let result = try JSONDecoder().decode(ApiKeyTestResponse.self, from: data)
+        return result.valid
+    }
+
     // MARK: - Projects
 
     func fetchProjects() async throws -> [Project] {
@@ -207,6 +232,28 @@ class APIService {
             throw APIError.httpError(statusCode: httpResponse.statusCode)
         }
     }
+}
+
+// MARK: - API Key Models
+
+struct UserApiKey: Codable, Identifiable {
+    let id: String
+    let provider: String
+    let label: String?
+    let maskedKey: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, provider, label
+        case maskedKey = "masked_key"
+    }
+}
+
+struct ApiKeysResponse: Codable {
+    let keys: [UserApiKey]
+}
+
+struct ApiKeyTestResponse: Codable {
+    let valid: Bool
 }
 
 // MARK: - Chat Response
