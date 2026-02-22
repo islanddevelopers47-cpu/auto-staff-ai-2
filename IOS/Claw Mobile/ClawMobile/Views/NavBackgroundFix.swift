@@ -40,7 +40,9 @@ private struct NavBackgroundFixVC: UIViewControllerRepresentable {
         }
 
         private func paintViews(_ view: UIView) {
-            if view.backgroundColor == .black || view.backgroundColor == UIColor(white: 0, alpha: 1) {
+            let bg = view.backgroundColor
+            // Replace black, near-black, systemBackground, and nil (transparent over black window)
+            if bg == nil || bg == .black || bg == .systemBackground || bg == .secondarySystemBackground {
                 view.backgroundColor = color
             }
             for sub in view.subviews {

@@ -4,9 +4,8 @@ struct DashboardView: View {
     @EnvironmentObject var dashboardVM: DashboardViewModel
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
+        ScrollView {
+            VStack(spacing: 20) {
                     // Stats cards
                     HStack(spacing: 16) {
                         StatCard(
@@ -45,15 +44,15 @@ struct DashboardView: View {
                 }
                 .padding(.top)
             }
-            .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
-            .navigationTitle("Dashboard")
-            .navigationBarTitleDisplayMode(.large)
-            .refreshable {
-                await dashboardVM.loadDashboard()
-            }
-            .task {
-                await dashboardVM.loadDashboard()
-            }
+        }
+        .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
+        .navigationTitle("Dashboard")
+        .navigationBarTitleDisplayMode(.large)
+        .refreshable {
+            await dashboardVM.loadDashboard()
+        }
+        .task {
+            await dashboardVM.loadDashboard()
         }
     }
 }

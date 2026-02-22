@@ -9,8 +9,7 @@ struct SettingsView: View {
     @State private var apiKeyError: String?
 
     var body: some View {
-        NavigationStack {
-            List {
+        List {
                 // Account Section
                 Section("Account") {
                     if let user = authViewModel.currentUser {
@@ -142,22 +141,21 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Color.white.opacity(0.06))
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
-            .navigationTitle("Settings")
-            .task { await loadApiKeys() }
-            .sheet(isPresented: $showAddKeySheet, onDismiss: { Task { await loadApiKeys() } }) {
-                AddApiKeySheet()
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
+        .navigationTitle("Settings")
+        .task { await loadApiKeys() }
+        .sheet(isPresented: $showAddKeySheet, onDismiss: { Task { await loadApiKeys() } }) {
+            AddApiKeySheet()
+        }
+        .alert("Sign Out", isPresented: $showSignOutAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Sign Out", role: .destructive) {
+                authViewModel.signOut()
             }
-            .alert("Sign Out", isPresented: $showSignOutAlert) {
-                Button("Cancel", role: .cancel) {}
-                Button("Sign Out", role: .destructive) {
-                    authViewModel.signOut()
-                }
-            } message: {
-                Text("Are you sure you want to sign out?")
-            }
+        } message: {
+            Text("Are you sure you want to sign out?")
         }
     }
 

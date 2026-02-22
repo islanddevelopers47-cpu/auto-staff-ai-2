@@ -6,8 +6,7 @@ struct AgentsListView: View {
     @State private var agentToDelete: Agent?
 
     var body: some View {
-        NavigationStack {
-            ZStack {
+        ZStack {
                 Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea()
 
                 if agentsVM.agents.isEmpty && !agentsVM.isLoading {
@@ -36,10 +35,7 @@ struct AgentsListView: View {
                 } else {
                     List {
                         ForEach(agentsVM.agents) { agent in
-                            NavigationLink {
-                                AgentDetailView(agent: agent)
-                                    .environmentObject(agentsVM)
-                            } label: {
+                            NavigationLink(value: agent) {
                                 AgentListRow(agent: agent)
                             }
                             .listRowBackground(Color.white.opacity(0.06))
@@ -78,7 +74,7 @@ struct AgentsListView: View {
                         .environmentObject(agentsVM)
                 }
             }
-            .alert("Delete Agent", isPresented: .init(
+        .alert("Delete Agent", isPresented: .init(
                 get: { agentToDelete != nil },
                 set: { if !$0 { agentToDelete = nil } }
             )) {
@@ -88,24 +84,23 @@ struct AgentsListView: View {
                         Task { await agentsVM.deleteAgent(agent) }
                     }
                 }
-            } message: {
-                Text("Are you sure you want to delete \"\(agentToDelete?.name ?? "")\"?")
-            }
-            .overlay {
-                if let error = agentsVM.errorMessage {
-                    VStack {
-                        Spacer()
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.red.opacity(0.8))
-                            .cornerRadius(8)
-                            .padding()
-                            .onTapGesture {
-                                agentsVM.errorMessage = nil
-                            }
-                    }
+        } message: {
+            Text("Are you sure you want to delete \"\(agentToDelete?.name ?? "")\"?")
+        }
+        .overlay {
+            if let error = agentsVM.errorMessage {
+                VStack {
+                    Spacer()
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding()
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(8)
+                        .padding()
+                        .onTapGesture {
+                            agentsVM.errorMessage = nil
+                        }
                 }
             }
         }

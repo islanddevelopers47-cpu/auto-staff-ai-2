@@ -26,34 +26,41 @@ struct MainTabView: View {
         ZStack(alignment: .bottom) {
             bgColor.ignoresSafeArea()
 
-            // Tab content
-            Group {
-                switch selectedTab {
-                case 0:
-                    DashboardView()
-                        .environmentObject(dashboardVM)
-                        .fixNavBackground()
-                case 1:
-                    AgentsListView()
+            // Single NavigationStack for the whole app — no per-tab UINavigationController
+            NavigationStack {
+                Group {
+                    switch selectedTab {
+                    case 0:
+                        DashboardView()
+                            .environmentObject(dashboardVM)
+                    case 1:
+                        AgentsListView()
+                            .environmentObject(agentsVM)
+                    case 2:
+                        ProjectsListView()
+                            .environmentObject(projectsVM)
+                            .environmentObject(agentsVM)
+                    case 3:
+                        ChatView()
+                            .environmentObject(chatVM)
+                            .environmentObject(agentsVM)
+                    default:
+                        SettingsView()
+                            .environmentObject(authViewModel)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(bgColor)
+                .navigationDestination(for: Agent.self) { agent in
+                    AgentDetailView(agent: agent)
                         .environmentObject(agentsVM)
-                        .fixNavBackground()
-                case 2:
-                    ProjectsListView()
+                }
+                .navigationDestination(for: String.self) { projectId in
+                    ProjectChatView(projectId: projectId)
                         .environmentObject(projectsVM)
                         .environmentObject(agentsVM)
-                        .fixNavBackground()
-                case 3:
-                    ChatView()
-                        .environmentObject(chatVM)
-                        .environmentObject(agentsVM)
-                        .fixNavBackground()
-                default:
-                    SettingsView()
-                        .environmentObject(authViewModel)
-                        .fixNavBackground()
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(bgColor.ignoresSafeArea())
 
             // Custom tab bar

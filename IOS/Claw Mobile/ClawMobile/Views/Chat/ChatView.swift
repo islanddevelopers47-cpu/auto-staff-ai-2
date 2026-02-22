@@ -10,7 +10,6 @@ struct ChatView: View {
     var body: some View {
         ZStack {
             bgColor.ignoresSafeArea()
-            NavigationStack {
             VStack(spacing: 0) {
                 // Agent selector bar
                 if let agent = chatVM.selectedAgent {
@@ -177,7 +176,6 @@ struct ChatView: View {
             }
         }
         .background(bgColor.ignoresSafeArea())
-        } // ZStack
     }
 
     private func sendMessage() {

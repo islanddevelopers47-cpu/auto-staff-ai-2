@@ -9,8 +9,7 @@ struct ProjectsListView: View {
     @State private var projectToDelete: Project?
 
     var body: some View {
-        NavigationStack {
-            ZStack {
+        ZStack {
                 Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea()
 
                 if projectsVM.projects.isEmpty && !projectsVM.isLoading {
@@ -41,11 +40,7 @@ struct ProjectsListView: View {
                 } else {
                     List {
                         ForEach(projectsVM.projects) { project in
-                            NavigationLink {
-                                ProjectChatView(projectId: project.id)
-                                    .environmentObject(projectsVM)
-                                    .environmentObject(agentsVM)
-                            } label: {
+                            NavigationLink(value: project.id) {
                                 ProjectListRow(project: project)
                             }
                             .listRowBackground(Color.white.opacity(0.06))
@@ -97,19 +92,18 @@ struct ProjectsListView: View {
                     }
                 }
             }
-            .alert("Delete Project", isPresented: .init(
-                get: { projectToDelete != nil },
-                set: { if !$0 { projectToDelete = nil } }
-            )) {
-                Button("Cancel", role: .cancel) { projectToDelete = nil }
-                Button("Delete", role: .destructive) {
-                    if let project = projectToDelete {
-                        Task { await projectsVM.deleteProject(project) }
-                    }
+        .alert("Delete Project", isPresented: .init(
+            get: { projectToDelete != nil },
+            set: { if !$0 { projectToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { projectToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let project = projectToDelete {
+                    Task { await projectsVM.deleteProject(project) }
                 }
-            } message: {
-                Text("Are you sure you want to delete \"\(projectToDelete?.title ?? "")\"?")
             }
+        } message: {
+            Text("Are you sure you want to delete \"\(projectToDelete?.title ?? "")\"?")
         }
     }
 }
