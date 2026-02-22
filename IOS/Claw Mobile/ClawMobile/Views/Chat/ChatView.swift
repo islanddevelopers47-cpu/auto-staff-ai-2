@@ -5,9 +5,12 @@ struct ChatView: View {
     @EnvironmentObject var agentsVM: AgentsViewModel
     @State private var messageText = ""
     @State private var showAgentPicker = false
+    private let bgColor = Color(red: 0.08, green: 0.04, blue: 0.12)
 
     var body: some View {
-        NavigationStack {
+        ZStack {
+            bgColor.ignoresSafeArea()
+            NavigationStack {
             VStack(spacing: 0) {
                 // Agent selector bar
                 if let agent = chatVM.selectedAgent {
@@ -145,9 +148,9 @@ struct ChatView: View {
                     .background(Color.white.opacity(0.06))
                 }
             }
-            .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
+            .background(bgColor.ignoresSafeArea())
             .navigationTitle("Chat")
-            .toolbarBackground(Color(red: 0.08, green: 0.04, blue: 0.12), for: .navigationBar)
+            .toolbarBackground(bgColor, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .sheet(isPresented: $showAgentPicker) {
                 AgentPickerSheet(agents: agentsVM.agents) { agent in
@@ -173,7 +176,8 @@ struct ChatView: View {
                 }
             }
         }
-        .background(Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea())
+        .background(bgColor.ignoresSafeArea())
+        } // ZStack
     }
 
     private func sendMessage() {

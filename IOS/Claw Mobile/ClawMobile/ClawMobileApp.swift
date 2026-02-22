@@ -7,6 +7,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         FirebaseApp.configure()
         UIScrollView.appearance().delaysContentTouches = false
+        // Ensure every UIWindow background is purple so no black bleeds through on any edge
+        UIWindow.appearance().backgroundColor = UIColor(red: 0.08, green: 0.04, blue: 0.12, alpha: 1.0)
         return true
     }
 
