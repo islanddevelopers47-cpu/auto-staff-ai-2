@@ -286,10 +286,9 @@ struct AgentDetailView: View {
         }
     }
 
-    @ViewBuilder
     private func mlxModelRow(model: MLXModelInfo) -> some View {
         let isSelected = agent.modelName == model.huggingFaceRepo
-        Button { agent.modelName = model.huggingFaceRepo } label: {
+        return Button { agent.modelName = model.huggingFaceRepo } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.name).foregroundColor(.white).font(.subheadline)
@@ -314,10 +313,9 @@ struct AgentDetailView: View {
         }
     }
 
-    @ViewBuilder
     private func cloudModelRow(id: String, label: String) -> some View {
         let isSelected = agent.modelName == id
-        Button { agent.modelName = id } label: {
+        return Button { agent.modelName = id } label: {
             HStack {
                 Text(label).foregroundColor(.white).font(.subheadline)
                 Spacer()
