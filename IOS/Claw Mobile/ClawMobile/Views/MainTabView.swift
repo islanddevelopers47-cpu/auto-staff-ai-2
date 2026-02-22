@@ -32,24 +32,29 @@ struct MainTabView: View {
                 case 0:
                     DashboardView()
                         .environmentObject(dashboardVM)
+                        .fixNavBackground()
                 case 1:
                     AgentsListView()
                         .environmentObject(agentsVM)
+                        .fixNavBackground()
                 case 2:
                     ProjectsListView()
                         .environmentObject(projectsVM)
                         .environmentObject(agentsVM)
+                        .fixNavBackground()
                 case 3:
                     ChatView()
                         .environmentObject(chatVM)
                         .environmentObject(agentsVM)
+                        .fixNavBackground()
                 default:
                     SettingsView()
                         .environmentObject(authViewModel)
+                        .fixNavBackground()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(bgColor)
+            .background(bgColor.ignoresSafeArea())
 
             // Custom tab bar
             VStack(spacing: 0) {
