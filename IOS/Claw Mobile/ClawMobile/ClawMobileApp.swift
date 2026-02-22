@@ -7,8 +7,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         FirebaseApp.configure()
         UIScrollView.appearance().delaysContentTouches = false
-        // Ensure every UIWindow background is purple so no black bleeds through on any edge
-        UIWindow.appearance().backgroundColor = UIColor(red: 0.08, green: 0.04, blue: 0.12, alpha: 1.0)
+        let purple = UIColor(red: 0.08, green: 0.04, blue: 0.12, alpha: 1.0)
+        UIWindow.appearance().backgroundColor = purple
         return true
     }
 
@@ -33,11 +33,6 @@ struct ClawMobileApp: App {
         UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
         UINavigationBar.appearance().compactAppearance = navAppearance
 
-        let tabAppearance = UITabBarAppearance()
-        tabAppearance.configureWithOpaqueBackground()
-        tabAppearance.backgroundColor = appBackground
-        UITabBar.appearance().standardAppearance = tabAppearance
-        UITabBar.appearance().scrollEdgeAppearance = tabAppearance
     }
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var authViewModel = AuthViewModel()
