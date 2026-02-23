@@ -199,7 +199,7 @@ export async function executeToolCalls(
 
   for (const match of matches) {
     const action = match[1]!;
-    const params = match[2]!.split("|").map((p) => p.trim());
+    const params = match[2] ? match[2].split("|").map((p) => p.trim()) : [];
 
     try {
       const result = await executeTool(db, userId, action, params);

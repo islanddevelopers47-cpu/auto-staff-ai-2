@@ -267,6 +267,7 @@ export class BotManager {
         apiKeyOverride: apiKey,
         providerOverride: provider,
         modelOverride: model,
+        userId: botRecord.user_id,
       });
 
       // Send response
