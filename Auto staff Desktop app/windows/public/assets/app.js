@@ -316,6 +316,7 @@ async function loadAgents() {
     const SKILL_LABELS = {
       'terminal': '🖥️ Terminal',
       'screen-capture': '📸 Screen Capture',
+      'screen-control': '🖱️ Screen Control',
       'web-search': '🔍 Web Search',
       'file-manager': '📁 Files',
       'code-execution': '⚡ Code Exec',

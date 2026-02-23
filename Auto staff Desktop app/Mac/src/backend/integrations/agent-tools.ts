@@ -111,6 +111,21 @@ export function buildIntegrationToolsPrompt(db: Database.Database, userId: strin
   prompt += "- `[[TOOL:screen_capture_window|app_name|filename]]` — Capture a screenshot of a specific application window (macOS only). The filename is optional.\n";
   prompt += "- `[[TOOL:screen_list_windows]]` — List all visible windows with their app names and titles.\n\n";
 
+  // Screen control — mouse, keyboard, scroll
+  prompt += "## Screen Control (Mouse & Keyboard)\n\n";
+  prompt += "These tools let you interact with the desktop — move the mouse, click, type, press keys, and scroll.\n";
+  prompt += "Always use screen_capture first to see the screen, then use coordinates from the screenshot to interact.\n\n";
+  prompt += "Available tools:\n";
+  prompt += "- `[[TOOL:screen_mouse_move|x|y]]` — Move the mouse cursor to screen coordinates (x, y).\n";
+  prompt += "- `[[TOOL:screen_mouse_click|x|y|button]]` — Click at (x, y). button = left (default), right, or double.\n";
+  prompt += "- `[[TOOL:screen_type|text]]` — Type text at the current cursor position.\n";
+  prompt += "- `[[TOOL:screen_key|key_combo]]` — Press a key combination. Examples: enter, tab, escape, cmd+c, ctrl+v, alt+tab, shift+cmd+3, cmd+a.\n";
+  prompt += "- `[[TOOL:screen_scroll|direction|amount]]` — Scroll. direction = up or down. amount = number of scroll ticks (default 3).\n";
+  prompt += "- `[[TOOL:screen_mouse_position]]` — Get the current mouse cursor position.\n";
+  prompt += "- `[[TOOL:screen_get_size]]` — Get the screen dimensions (width × height).\n\n";
+  prompt += "**Workflow**: 1) Take a screenshot to see the screen. 2) Identify the coordinates of the element to interact with. 3) Move/click on it. 4) Take another screenshot to verify.\n";
+  prompt += "**Safety**: Always confirm with the user before performing potentially destructive actions (e.g., deleting files, submitting forms).\n\n";
+
   // Terminal execution — always available on desktop
   const platform = os.platform();
   const shellName = platform === "win32" ? "PowerShell" : "Terminal (bash/zsh)";
@@ -537,6 +552,260 @@ print('\\n'.join(result[:30]))
         }
         return "Window listing is not supported on this platform.";
       }
+
+      // --- Screen Control tools (mouse, keyboard, scroll) ---
+
+      case "screen_mouse_move": {
+        const x = parseInt(params[0], 10);
+        const y = parseInt(params[1], 10);
+        if (isNaN(x) || isNaN(y)) return "Error: x and y coordinates are required (numbers)";
+
+        try {
+          if (platform === "darwin") {
+            await execAsync(`python3 -c "
+import Quartz
+point = Quartz.CGPointMake(${x}, ${y})
+event = Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, point, Quartz.kCGMouseButtonLeft)
+Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+"`);
+          } else if (platform === "win32") {
+            await execAsync(
+              `powershell -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Mouse { [DllImport(\\"user32.dll\\")] public static extern bool SetCursorPos(int X, int Y); }'; [Mouse]::SetCursorPos(${x}, ${y})"`
+            );
+          } else {
+            return "Screen control is not supported on this platform.";
+          }
+          return `Mouse moved to (${x}, ${y})`;
+        } catch (err: any) {
+          return `Error moving mouse: ${err.message}. Ensure accessibility permissions are granted.`;
+        }
+      }
+
+      case "screen_mouse_click": {
+        const x = parseInt(params[0], 10);
+        const y = parseInt(params[1], 10);
+        const button = (params[2] || "left").toLowerCase();
+        if (isNaN(x) || isNaN(y)) return "Error: x and y coordinates are required (numbers)";
+
+        try {
+          if (platform === "darwin") {
+            let downType: string, upType: string, btnConst: string;
+            if (button === "right") {
+              downType = "Quartz.kCGEventRightMouseDown";
+              upType = "Quartz.kCGEventRightMouseUp";
+              btnConst = "Quartz.kCGMouseButtonRight";
+            } else {
+              downType = "Quartz.kCGEventLeftMouseDown";
+              upType = "Quartz.kCGEventLeftMouseUp";
+              btnConst = "Quartz.kCGMouseButtonLeft";
+            }
+            const clickCount = button === "double" ? 2 : 1;
+            await execAsync(`python3 -c "
+import Quartz, time
+point = Quartz.CGPointMake(${x}, ${y})
+# Move first
+move = Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, point, Quartz.kCGMouseButtonLeft)
+Quartz.CGEventPost(Quartz.kCGHIDEventTap, move)
+time.sleep(0.05)
+for i in range(${clickCount}):
+    down = Quartz.CGEventCreateMouseEvent(None, ${downType}, point, ${btnConst})
+    Quartz.CGEventSetIntegerValueField(down, Quartz.kCGMouseEventClickState, i + 1)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, down)
+    time.sleep(0.02)
+    up = Quartz.CGEventCreateMouseEvent(None, ${upType}, point, ${btnConst})
+    Quartz.CGEventSetIntegerValueField(up, Quartz.kCGMouseEventClickState, i + 1)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, up)
+    time.sleep(0.02)
+"`);
+          } else if (platform === "win32") {
+            let flags: string;
+            if (button === "right") {
+              flags = "0x0008, 0, 0, 0, UIntPtr.Zero); Mouse.mouse_event(0x0010";
+            } else if (button === "double") {
+              flags = "0x0002, 0, 0, 0, UIntPtr.Zero); Mouse.mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero); System.Threading.Thread.Sleep(50); Mouse.mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero); Mouse.mouse_event(0x0004";
+            } else {
+              flags = "0x0002, 0, 0, 0, UIntPtr.Zero); Mouse.mouse_event(0x0004";
+            }
+            await execAsync(
+              `powershell -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Mouse { [DllImport(\\"user32.dll\\")] public static extern bool SetCursorPos(int X, int Y); [DllImport(\\"user32.dll\\")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo); }'; [Mouse]::SetCursorPos(${x}, ${y}); [Mouse]::mouse_event(${flags}, 0, 0, UIntPtr.Zero)"`
+            );
+          } else {
+            return "Screen control is not supported on this platform.";
+          }
+          return `Mouse ${button} clicked at (${x}, ${y})`;
+        } catch (err: any) {
+          return `Error clicking: ${err.message}. Ensure accessibility permissions are granted.`;
+        }
+      }
+
+      case "screen_type": {
+        const text = params[0];
+        if (!text) return "Error: text is required";
+
+        try {
+          if (platform === "darwin") {
+            // Use AppleScript keystroke for typing text
+            const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+            await execAsync(`osascript -e 'tell application "System Events" to keystroke "${escaped}"'`);
+          } else if (platform === "win32") {
+            const escaped = text.replace(/'/g, "''").replace(/`/g, "``");
+            await execAsync(
+              `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')"`
+            );
+          } else {
+            return "Screen control is not supported on this platform.";
+          }
+          return `Typed: "${text.length > 60 ? text.slice(0, 60) + "..." : text}"`;
+        } catch (err: any) {
+          return `Error typing: ${err.message}. Ensure accessibility permissions are granted.`;
+        }
+      }
+
+      case "screen_key": {
+        const combo = params[0];
+        if (!combo) return "Error: key_combo is required (e.g., enter, cmd+c, ctrl+v)";
+
+        try {
+          if (platform === "darwin") {
+            // Map key combos to AppleScript
+            const parts = combo.toLowerCase().split("+").map((k: string) => k.trim());
+            const modifiers: string[] = [];
+            let key = "";
+            for (const p of parts) {
+              if (["cmd", "command"].includes(p)) modifiers.push("command down");
+              else if (["ctrl", "control"].includes(p)) modifiers.push("control down");
+              else if (["alt", "option"].includes(p)) modifiers.push("option down");
+              else if (["shift"].includes(p)) modifiers.push("shift down");
+              else key = p;
+            }
+            // Map special key names to key codes
+            const keyCodeMap: Record<string, number> = {
+              "return": 36, "enter": 36, "tab": 48, "escape": 53, "esc": 53,
+              "space": 49, "delete": 51, "backspace": 51, "forwarddelete": 117,
+              "up": 126, "down": 125, "left": 123, "right": 124,
+              "home": 115, "end": 119, "pageup": 116, "pagedown": 121,
+              "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97,
+              "f7": 98, "f8": 100, "f9": 101, "f10": 109, "f11": 103, "f12": 111,
+            };
+            const modStr = modifiers.length > 0 ? ` using {${modifiers.join(", ")}}` : "";
+
+            if (keyCodeMap[key] !== undefined) {
+              await execAsync(`osascript -e 'tell application "System Events" to key code ${keyCodeMap[key]}${modStr}'`);
+            } else if (key.length === 1) {
+              await execAsync(`osascript -e 'tell application "System Events" to keystroke "${key}"${modStr}'`);
+            } else {
+              return `Error: Unknown key "${key}". Use key names like: enter, tab, escape, space, delete, up, down, left, right, f1-f12, or single characters.`;
+            }
+          } else if (platform === "win32") {
+            // Map to SendKeys format
+            const parts = combo.toLowerCase().split("+").map((k: string) => k.trim());
+            let sendKey = "";
+            for (const p of parts) {
+              if (["ctrl", "control"].includes(p)) sendKey += "^";
+              else if (["alt"].includes(p)) sendKey += "%";
+              else if (["shift"].includes(p)) sendKey += "+";
+              else if (["enter", "return"].includes(p)) sendKey += "{ENTER}";
+              else if (["tab"].includes(p)) sendKey += "{TAB}";
+              else if (["escape", "esc"].includes(p)) sendKey += "{ESC}";
+              else if (["space"].includes(p)) sendKey += " ";
+              else if (["delete", "backspace"].includes(p)) sendKey += "{BACKSPACE}";
+              else if (["up"].includes(p)) sendKey += "{UP}";
+              else if (["down"].includes(p)) sendKey += "{DOWN}";
+              else if (["left"].includes(p)) sendKey += "{LEFT}";
+              else if (["right"].includes(p)) sendKey += "{RIGHT}";
+              else if (["home"].includes(p)) sendKey += "{HOME}";
+              else if (["end"].includes(p)) sendKey += "{END}";
+              else if (["pageup"].includes(p)) sendKey += "{PGUP}";
+              else if (["pagedown"].includes(p)) sendKey += "{PGDN}";
+              else if (p.match(/^f\d+$/)) sendKey += `{${p.toUpperCase()}}`;
+              else sendKey += p;
+            }
+            const escaped = sendKey.replace(/'/g, "''");
+            await execAsync(
+              `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')"`
+            );
+          } else {
+            return "Screen control is not supported on this platform.";
+          }
+          return `Key pressed: ${combo}`;
+        } catch (err: any) {
+          return `Error pressing key: ${err.message}. Ensure accessibility permissions are granted.`;
+        }
+      }
+
+      case "screen_scroll": {
+        const direction = (params[0] || "down").toLowerCase();
+        const amount = parseInt(params[1] || "3", 10);
+        const scrollUp = direction === "up";
+
+        try {
+          if (platform === "darwin") {
+            const scrollVal = scrollUp ? amount : -amount;
+            await execAsync(`python3 -c "
+import Quartz
+event = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitLine, 1, ${scrollVal})
+Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+"`);
+          } else if (platform === "win32") {
+            const scrollVal = scrollUp ? amount * 120 : -(amount * 120);
+            await execAsync(
+              `powershell -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Mouse { [DllImport(\\"user32.dll\\")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo); }'; [Mouse]::mouse_event(0x0800, 0, 0, ${scrollVal}, [UIntPtr]::Zero)"`
+            );
+          } else {
+            return "Screen control is not supported on this platform.";
+          }
+          return `Scrolled ${direction} by ${amount} ticks`;
+        } catch (err: any) {
+          return `Error scrolling: ${err.message}`;
+        }
+      }
+
+      case "screen_mouse_position": {
+        try {
+          if (platform === "darwin") {
+            const { stdout } = await execAsync(`python3 -c "
+import Quartz
+loc = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
+print(f'{int(loc.x)},{int(loc.y)}')
+"`);
+            const [mx, my] = stdout.trim().split(",");
+            return `Mouse position: (${mx}, ${my})`;
+          } else if (platform === "win32") {
+            const { stdout } = await execAsync(
+              `powershell -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Cursor { [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; } [DllImport(\\"user32.dll\\")] public static extern bool GetCursorPos(out POINT lpPoint); }'; $p = New-Object Cursor+POINT; [Cursor]::GetCursorPos([ref]$p) | Out-Null; Write-Output \\\"$($p.X),$($p.Y)\\\""`
+            );
+            const [mx, my] = stdout.trim().split(",");
+            return `Mouse position: (${mx}, ${my})`;
+          }
+          return "Not supported on this platform.";
+        } catch (err: any) {
+          return `Error getting mouse position: ${err.message}`;
+        }
+      }
+
+      case "screen_get_size": {
+        try {
+          if (platform === "darwin") {
+            const { stdout } = await execAsync(`python3 -c "
+import Quartz
+d = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
+print(f'{int(d.size.width)},{int(d.size.height)}')
+"`);
+            const [w, h] = stdout.trim().split(",");
+            return `Screen size: ${w} × ${h} pixels`;
+          } else if (platform === "win32") {
+            const { stdout } = await execAsync(
+              `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; $s = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; Write-Output \\\"$($s.Width),$($s.Height)\\\""`
+            );
+            const [w, h] = stdout.trim().split(",");
+            return `Screen size: ${w} × ${h} pixels`;
+          }
+          return "Not supported on this platform.";
+        } catch (err: any) {
+          return `Error getting screen size: ${err.message}`;
+        }
+      }
+
       default:
         return `Unknown screen tool: ${action}`;
     }
