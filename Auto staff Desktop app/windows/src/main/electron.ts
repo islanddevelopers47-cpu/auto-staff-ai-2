@@ -80,6 +80,32 @@ let backendReady = false;
 async function startBackend(port: number): Promise<void> {
   const dataDir = ensureDataDir();
 
+  // Load .env from userData directory (persists across app updates)
+  const userEnvPath = path.join(dataDir, "..", ".env");
+  if (!fs.existsSync(userEnvPath)) {
+    // Create default .env template on first launch
+    const envTemplate = [
+      "# Claw Staffer Desktop — Configuration",
+      "# Edit this file to configure your app.",
+      "",
+      "# Free Kimi K2.5 API Key (from Moonshot AI — completely free!)",
+      "# Get your free key at: https://platform.moonshot.ai/console/api-keys",
+      "# Once set, all users of this app get Kimi K2.5 access automatically.",
+      "MOONSHOT_FREE_API_KEY=",
+      "",
+      "# Admin password (change this!)",
+      "ADMIN_PASSWORD=admin123",
+      "",
+    ].join("\n");
+    try { fs.writeFileSync(userEnvPath, envTemplate, "utf-8"); } catch {}
+  }
+
+  // Load env vars from the user's .env file before setting defaults
+  try {
+    const dotenvLib = await import("dotenv");
+    dotenvLib.config({ path: userEnvPath });
+  } catch {}
+
   // Set environment variables before importing backend
   process.env.PORT = String(port);
   process.env.HOST = "127.0.0.1";
