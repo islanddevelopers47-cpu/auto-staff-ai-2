@@ -278,6 +278,7 @@
                   <option value="moonshot">Kimi (Moonshot) — Free</option>
                   <option value="deepseek">DeepSeek</option>
                   <option value="minimax">MiniMax</option>
+                  <option value="ollama">Ollama (Local — Free)</option>
                 </select>
               </div>
               <div class="field">
@@ -938,6 +939,32 @@
                 <div class="api-key-msg"></div>
               </form>
               <p class="provider-key-help">Get your key at <a href="https://www.minimax.io" target="_blank">minimax.io</a></p>
+            </div>
+          </div>
+
+          <!-- Ollama (Local) -->
+          <div class="provider-row" onclick="this.classList.toggle('expanded')">
+            <div class="provider-row-main">
+              <div class="provider-row-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" opacity=".7"/><path d="M8 9h8M8 12h8M8 15h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".7"/></svg>
+              </div>
+              <div class="provider-row-info">
+                <h4>Ollama <span class="provider-badge" style="background:#22c55e;color:#fff">LOCAL</span> <span class="provider-badge" style="background:#22c55e;color:#fff">FREE</span> <span id="ollama-status" class="provider-badge">Not running</span></h4>
+                <p>llama3.2, Mistral, CodeLlama, Phi3 — run any open-source model 100% locally, no API key needed</p>
+              </div>
+            </div>
+            <div class="provider-row-expand" onclick="event.stopPropagation()">
+              <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.5rem">
+                <button type="button" class="btn btn-primary" id="ollama-start-btn" onclick="ollamaStart()">▶ Start Ollama</button>
+                <button type="button" class="btn btn-sm" id="ollama-refresh-btn" onclick="ollamaRefreshStatus()">↻ Check Status</button>
+                <span id="ollama-start-msg" style="font-size:0.82rem;color:var(--text-dim)"></span>
+              </div>
+              <div id="ollama-models-list" style="display:none;margin-top:0.4rem">
+                <p style="font-size:0.82rem;margin-bottom:0.3rem">Installed models:</p>
+                <div id="ollama-models-tags" style="display:flex;flex-wrap:wrap;gap:0.3rem"></div>
+                <p style="font-size:0.8rem;color:var(--text-dim);margin-top:0.4rem">Pull more models at <a href="https://ollama.com/library" target="_blank">ollama.com/library</a> — run <code>ollama pull modelname</code> in terminal.</p>
+              </div>
+              <p class="provider-key-help">Runs entirely on your machine — no API key, no internet required. Download from <a href="https://ollama.com" target="_blank">ollama.com</a> or click Start to auto-install.</p>
             </div>
           </div>
 

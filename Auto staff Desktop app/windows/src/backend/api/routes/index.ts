@@ -14,6 +14,7 @@ import { createWebBotsRouter } from "./web-bots.js";
 import { createIntegrationsRouter } from "./integrations.js";
 import { createAgentTasksRouter } from "./agent-tasks.js";
 import { createProjectsRouter } from "./projects.js";
+import { createOllamaRouter } from "./ollama.js";
 
 export function registerRoutes(
   app: Express,
@@ -56,6 +57,9 @@ export function registerRoutes(
 
   // Projects routes
   app.use("/api", createProjectsRouter(db, agentRegistry));
+
+  // Ollama local LLM management routes
+  app.use("/api", createOllamaRouter());
 
   // Telegram webhook endpoint (per-bot)
   app.post("/api/telegram/webhook/:botId", (req, res) => {

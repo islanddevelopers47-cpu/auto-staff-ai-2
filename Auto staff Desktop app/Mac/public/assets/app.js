@@ -361,7 +361,8 @@ const MODELS = {
   grok: ['grok-3', 'grok-3-mini', 'grok-2', 'grok-2-mini'],
   moonshot: ['kimi-k2.5', 'kimi-k2', 'moonshot-v1-auto'],
   deepseek: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
-  minimax: ['MiniMax-M2.5', 'MiniMax-M2.1', 'MiniMax-M2.1-lightning']
+  minimax: ['MiniMax-M2.5', 'MiniMax-M2.1', 'MiniMax-M2.1-lightning'],
+  ollama: ['llama3.2', 'llama3.1', 'mistral', 'codellama', 'phi3']
 };
 
 document.getElementById('agent-provider').addEventListener('change', () => {
@@ -719,7 +720,7 @@ async function loadApiKeys() {
 }
 
 function updateApiKeyStatuses() {
-  const providers = ['openai', 'anthropic', 'google', 'grok'];
+  const providers = ['openai', 'anthropic', 'google', 'grok', 'moonshot', 'deepseek', 'minimax', 'ollama'];
   for (const p of providers) {
     const badge = document.getElementById(`${p}-status`);
     if (!badge) continue;
@@ -746,6 +747,8 @@ function updateApiKeyStatuses() {
       }
     }
   }
+  // Ollama status check (async — no API key needed)
+  ollamaRefreshStatus();
 }
 
 function renderStoredKeys() {
@@ -763,6 +766,65 @@ function renderStoredKeys() {
       <button class="btn btn-sm btn-danger" onclick="deleteApiKey('${k.id}')">Remove</button>
     </div>
   `).join('') + '</div>';
+}
+
+// --- Ollama local LLM ---
+async function ollamaRefreshStatus() {
+  const badge = document.getElementById('ollama-status');
+  if (!badge) return;
+  try {
+    const data = await api('/ollama/status');
+    if (data.running) {
+      badge.textContent = 'Running';
+      badge.className = 'provider-badge provider-badge--ok';
+      const startBtn = document.getElementById('ollama-start-btn');
+      if (startBtn) startBtn.textContent = '✓ Running';
+      const startMsg = document.getElementById('ollama-start-msg');
+      if (startMsg) startMsg.textContent = 'Ollama is running on localhost:11434';
+      try {
+        const mdata = await api('/ollama/models');
+        const tags = document.getElementById('ollama-models-tags');
+        const list = document.getElementById('ollama-models-list');
+        if (tags && list) {
+          if (mdata.models && mdata.models.length) {
+            tags.innerHTML = mdata.models.map(m => `<span style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.35);border-radius:4px;padding:2px 8px;font-size:0.78rem">${m}</span>`).join('');
+            MODELS.ollama = mdata.models;
+          } else {
+            tags.innerHTML = '<span style="color:var(--text-dim);font-size:0.8rem">No models installed. Run: <code>ollama pull llama3.2</code></span>';
+          }
+          list.style.display = '';
+        }
+      } catch {}
+    } else {
+      badge.textContent = 'Not running';
+      badge.className = 'provider-badge';
+      const startBtn = document.getElementById('ollama-start-btn');
+      if (startBtn) startBtn.textContent = '▶ Start Ollama';
+    }
+  } catch {
+    badge.textContent = 'Not running';
+    badge.className = 'provider-badge';
+  }
+}
+
+async function ollamaStart() {
+  const btn = document.getElementById('ollama-start-btn');
+  const msg = document.getElementById('ollama-start-msg');
+  const badge = document.getElementById('ollama-status');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Starting...'; }
+  if (msg) { msg.style.color = 'var(--text-dim)'; msg.textContent = 'Starting Ollama — this may take a minute if installing...'; }
+  if (badge) { badge.textContent = 'Starting...'; badge.className = 'provider-badge'; }
+  try {
+    const data = await api('/ollama/start', { method: 'POST' });
+    if (msg) msg.textContent = data.message || 'Ollama started!';
+    await ollamaRefreshStatus();
+  } catch (err) {
+    if (msg) { msg.style.color = 'var(--danger,#ef4444)'; msg.textContent = '❌ ' + (err.message || 'Failed to start Ollama'); }
+    if (badge) badge.textContent = 'Error';
+    if (btn) btn.textContent = '▶ Start Ollama';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 // Save key forms
