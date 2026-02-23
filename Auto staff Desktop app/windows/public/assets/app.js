@@ -313,20 +313,36 @@ async function loadAgents() {
       list.innerHTML = '<div class="card"><p>No agents yet.</p></div>';
       return;
     }
-    list.innerHTML = data.agents.map(agent => `
+    const SKILL_LABELS = {
+      'terminal': '🖥️ Terminal',
+      'screen-capture': '📸 Screen Capture',
+      'web-search': '🔍 Web Search',
+      'file-manager': '📁 Files',
+      'code-execution': '⚡ Code Exec',
+      'github': '🐙 GitHub',
+      'google-drive': '📄 Google Drive',
+      'vercel': '▲ Vercel',
+      'netlify': '🌐 Netlify',
+      'docker': '🐳 Docker'
+    };
+    list.innerHTML = data.agents.map(agent => {
+      const skillTags = (agent.skills || []).map(s =>
+        `<span style="display:inline-block;padding:2px 8px;background:rgba(255,136,0,0.15);color:var(--primary);border-radius:12px;font-size:0.75rem;margin:2px">${SKILL_LABELS[s] || s}</span>`
+      ).join('');
+      return `
       <div class="card">
         <h3>${agent.name} ${agent.is_builtin ? '<span style="color:var(--text-dim)">[built-in]</span>' : ''}</h3>
         <p>${agent.description || 'No description'}</p>
         <div class="meta">
           <span>${agent.model_provider}/${agent.model_name}</span>
           <span>Temp: ${agent.temperature}</span>
-          <span>Skills: ${agent.skills.length || 0}</span>
         </div>
+        ${(agent.skills || []).length ? `<div style="margin-top:0.4rem">${skillTags}</div>` : '<div style="margin-top:0.4rem;color:var(--text-dim);font-size:0.8rem">No skills assigned</div>'}
         ${!agent.is_builtin ? `<div class="actions">
           <button class="btn btn-sm btn-danger" onclick="deleteAgent('${agent.id}')">Delete</button>
         </div>` : ''}
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   } catch (err) { console.error('Agents load error:', err); }
 }
 
@@ -377,6 +393,7 @@ document.getElementById('add-agent-btn').addEventListener('click', () => {
 document.getElementById('add-agent-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
+    const selectedSkills = Array.from(document.querySelectorAll('#agent-skills-list input[type="checkbox"]:checked')).map(cb => cb.value);
     await api('/agents', {
       method: 'POST',
       body: JSON.stringify({
@@ -386,10 +403,12 @@ document.getElementById('add-agent-form').addEventListener('submit', async (e) =
         modelName: document.getElementById('agent-model').value,
         systemPrompt: document.getElementById('agent-prompt').value || undefined,
         temperature: parseFloat(document.getElementById('agent-temp').value) || 0.7,
+        skills: selectedSkills,
       })
     });
     closeModal('add-agent-modal');
     document.getElementById('add-agent-form').reset();
+    document.querySelectorAll('#agent-skills-list input[type="checkbox"]').forEach(cb => cb.checked = false);
     loadAgents();
   } catch (e) { alert(e.message); }
 });
@@ -486,7 +505,7 @@ function updateAgentChatInfo() {
       <span><strong>${agent.name}</strong></span>
       <span class="agent-chat-meta">${agent.model_provider}/${agent.model_name}</span>
       <span class="agent-chat-meta">Temp: ${agent.temperature}</span>
-      <span class="agent-chat-meta">Skills: ${agent.skills?.length || 0}</span>
+      <span class="agent-chat-meta">Skills: ${(agent.skills?.length || 0)}</span>
       ${agent.description ? `<span class="agent-chat-meta">${agent.description}</span>` : ''}
     `;
   } else {
