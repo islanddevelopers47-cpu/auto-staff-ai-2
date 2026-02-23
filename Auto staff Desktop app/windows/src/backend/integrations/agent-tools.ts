@@ -75,9 +75,37 @@ export function buildIntegrationToolsPrompt(db: Database.Database, userId: strin
   const env = getEnv();
   const dockerHost = resolveIntegrationCred(db, "docker_host", env.DOCKER_HOST);
 
-  let prompt = "\n\n---\n\n# Tools\n\n";
-  prompt += "You have access to tools. To use a tool, output the exact syntax shown below.\n";
-  prompt += "The system will execute the tool and provide the result.\n\n";
+  const platform = os.platform();
+  const platformName = platform === "darwin" ? "macOS" : platform === "win32" ? "Windows" : "Linux";
+
+  let prompt = "\n\n---\n\n# Local Desktop Agent — Direct System Access\n\n";
+  prompt += `You are running as a LOCAL DESKTOP AGENT on the user's ${platformName} machine. `;
+  prompt += "You have DIRECT ACCESS to their filesystem, terminal, screen, and applications. ";
+  prompt += "The tools below execute IMMEDIATELY on the user's computer — no browser, no remote server.\n\n";
+
+  prompt += "## ⚡ ACTION PROTOCOL — CRITICAL\n\n";
+  prompt += "When a user asks you to DO something on their computer (open an app, run a command, click something, read a file, etc.):\n";
+  prompt += "1. **USE THE TOOLS. Do it NOW.** Do not give text instructions telling the user to do it themselves.\n";
+  prompt += "2. **Never say** \"I don't have direct access to your system\" or \"I can't open apps\" — you CAN and you SHOULD.\n";
+  prompt += "3. **Act immediately**: pick the right tool, execute it, report what happened.\n";
+  prompt += "4. For opening apps use `shell_exec` — it works 100% of the time.\n\n";
+
+  if (platform === "darwin") {
+    prompt += "**macOS quick reference** (use shell_exec):\n";
+    prompt += "- Open any app: `open -a \"App Name\"` (e.g., `open -a \"Roblox\"`, `open -a \"Safari\"`, `open -a \"Finder\"`)\n";
+    prompt += "- Open a URL: `open \"https://example.com\"`\n";
+    prompt += "- Open a file: `open \"/path/to/file\"`\n";
+    prompt += "- Kill a process: `pkill -x \"App Name\"`\n";
+    prompt += "- List running apps: `ps aux | grep -v grep | grep .app`\n\n";
+  } else if (platform === "win32") {
+    prompt += "**Windows quick reference** (use shell_exec, runs in PowerShell):\n";
+    prompt += "- Open any app: `Start-Process \"AppName\"` or `Start-Process \"C:\\path\\to\\app.exe\"`\n";
+    prompt += "- Open a URL: `Start-Process \"https://example.com\"`\n";
+    prompt += "- Kill a process: `Stop-Process -Name \"ProcessName\" -Force`\n";
+    prompt += "- List running apps: `Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | Select Name,MainWindowTitle`\n\n";
+  }
+
+  prompt += "To use any tool, output the EXACT syntax shown. The system executes it and returns the result to you.\n\n";
 
   // Web tools — always available
   prompt += "## Web Search & Browse\n\n";
@@ -161,7 +189,6 @@ export function buildIntegrationToolsPrompt(db: Database.Database, userId: strin
   prompt += "**Safety**: Always confirm with the user before performing potentially destructive actions (e.g., deleting files, submitting forms).\n\n";
 
   // Terminal execution — always available on desktop
-  const platform = os.platform();
   const shellName = platform === "win32" ? "PowerShell" : "Terminal (bash/zsh)";
   prompt += `## ${shellName} Execution\n\n`;
   prompt += "Available tools:\n";
