@@ -22,6 +22,21 @@ export function createAgentsRouter(db: Database.Database, agentRegistry: AgentRe
     });
   });
 
+  // Live screen feed for Monitor Mode — MUST be before /agents/:id to prevent route shadowing
+  router.get("/agents/screen-live", authMiddleware, async (_req, res) => {
+    try {
+      const screenshot = await captureCurrentScreen();
+      if (!screenshot) {
+        res.status(503).json({ error: "Screen capture not available on this platform" });
+        return;
+      }
+      try { fs.unlinkSync(screenshot.path); } catch {}
+      res.json({ image: `data:image/png;base64,${screenshot.base64}`, timestamp: Date.now() });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message ?? "Screen capture failed" });
+    }
+  });
+
   router.get("/agents/:id", authMiddleware, (req, res) => {
     const agent = findAgentById(db, String(req.params.id));
     if (!agent) {
@@ -157,23 +172,6 @@ export function createAgentsRouter(db: Database.Database, agentRegistry: AgentRe
     const name = String(req.params.name) as ProviderName;
     const models = getDefaultModels(name);
     res.json({ provider: name, models });
-  });
-
-  // Live screen feed for Monitor Mode — captures and returns current screen as base64 JPEG
-  router.get("/agents/screen-live", authMiddleware, async (_req, res) => {
-    try {
-      const screenshot = await captureCurrentScreen();
-      if (!screenshot) {
-        res.status(503).json({ error: "Screen capture not available on this platform" });
-        return;
-      }
-      const dataUrl = `data:image/jpeg;base64,${screenshot.base64}`;
-      // Clean up temp file
-      try { fs.unlinkSync(screenshot.path); } catch {}
-      res.json({ image: dataUrl, timestamp: Date.now() });
-    } catch (err: any) {
-      res.status(500).json({ error: err?.message ?? "Screen capture failed" });
-    }
   });
 
   // Direct agent chat — runs agent pipeline without a bot

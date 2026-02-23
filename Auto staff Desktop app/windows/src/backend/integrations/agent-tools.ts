@@ -26,10 +26,11 @@ const log = createLogger("agent-tools");
  */
 export async function captureCurrentScreen(): Promise<{ path: string; base64: string } | null> {
   const platform = os.platform();
-  const tmpPath = path.join(os.tmpdir(), `monitor-${Date.now()}.jpg`);
+  const tmpPath = path.join(os.tmpdir(), `monitor-${Date.now()}.png`);
   try {
     if (platform === "darwin") {
-      await execAsync(`screencapture -x -t jpg "${tmpPath}"`);
+      // screencapture defaults to PNG — no -t flag needed, most reliable format
+      await execAsync(`screencapture -x "${tmpPath}"`);
     } else if (platform === "win32") {
       await execAsync(
         `powershell -Command "Add-Type -AssemblyName System.Windows.Forms, System.Drawing; ` +
@@ -37,10 +38,7 @@ export async function captureCurrentScreen(): Promise<{ path: string; base64: st
         `$bmp = New-Object System.Drawing.Bitmap($screen.Bounds.Width, $screen.Bounds.Height); ` +
         `$g = [System.Drawing.Graphics]::FromImage($bmp); ` +
         `$g.CopyFromScreen($screen.Bounds.Location, [System.Drawing.Point]::Empty, $screen.Bounds.Size); ` +
-        `$enc = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object {$_.FormatDescription -eq 'JPEG'}; ` +
-        `$params = New-Object System.Drawing.Imaging.EncoderParameters(1); ` +
-        `$params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, 75L); ` +
-        `$bmp.Save('${tmpPath.replace(/'/g, "''")}', $enc, $params); ` +
+        `$bmp.Save('${tmpPath.replace(/'/g, "''")}', [System.Drawing.Imaging.ImageFormat]::Png); ` +
         `$g.Dispose(); $bmp.Dispose()"`
       );
     } else {
