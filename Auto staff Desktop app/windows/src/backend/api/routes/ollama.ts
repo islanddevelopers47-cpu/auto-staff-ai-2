@@ -22,7 +22,7 @@ export function createOllamaRouter(): Router {
     }
   });
 
-  // Start Ollama (install if missing, then start serve)
+  // Start Ollama (launch if installed, install only if truly missing)
   router.post("/ollama/start", authMiddleware, async (_req, res) => {
     const platform = os.platform();
 
@@ -35,23 +35,62 @@ export function createOllamaRouter(): Router {
       }
     } catch {}
 
-    // Check if ollama binary exists
-    let installed = false;
-    try {
-      await execAsync("which ollama || where ollama");
-      installed = true;
-    } catch {}
+    // Detect if Ollama is installed — check all common locations
+    // (Electron's PATH may not include /usr/local/bin, so check explicitly)
+    const macAppPath = "/Applications/Ollama.app";
+    const commonBinPaths = [
+      "/usr/local/bin/ollama",
+      "/usr/bin/ollama",
+      `${os.homedir()}/.ollama/bin/ollama`,
+      `${os.homedir()}/bin/ollama`,
+    ];
+    const winPaths = [
+      `${process.env["LOCALAPPDATA"] ?? ""}\\Programs\\Ollama\\ollama.exe`,
+      `${process.env["ProgramFiles"] ?? ""}\\Ollama\\ollama.exe`,
+    ];
 
-    if (!installed) {
-      // Install Ollama
+    let ollamaBin: string | null = null;
+    let ollamaIsApp = false; // macOS .app launch
+
+    if (platform === "darwin") {
+      const { existsSync } = await import("node:fs");
+      if (existsSync(macAppPath)) {
+        ollamaIsApp = true;
+      } else {
+        for (const p of commonBinPaths) {
+          if (existsSync(p)) { ollamaBin = p; break; }
+        }
+        // Also try PATH lookup
+        if (!ollamaBin) {
+          try { await execAsync("/usr/bin/which ollama"); ollamaBin = "ollama"; } catch {}
+        }
+      }
+    } else if (platform === "win32") {
+      const { existsSync } = await import("node:fs");
+      for (const p of winPaths) {
+        if (p && existsSync(p)) { ollamaBin = p; break; }
+      }
+      if (!ollamaBin) {
+        try { await execAsync("where ollama"); ollamaBin = "ollama"; } catch {}
+      }
+    } else {
+      // Linux
+      try { await execAsync("which ollama"); ollamaBin = "ollama"; } catch {}
+    }
+
+    const isInstalled = ollamaIsApp || !!ollamaBin;
+
+    if (!isInstalled) {
+      // Only install if truly not found anywhere
       try {
         if (platform === "darwin" || platform === "linux") {
-          log.info("Installing Ollama via install script...");
-          await execAsync("curl -fsSL https://ollama.com/install.sh | sh");
-          installed = true;
+          log.info("Ollama not found, installing via install script...");
+          await execAsync("curl -fsSL https://ollama.com/install.sh | sh", {
+            env: { ...process.env, PATH: `/usr/local/bin:/usr/bin:/bin:${process.env["PATH"] ?? ""}` },
+          });
+          ollamaBin = "ollama";
         } else if (platform === "win32") {
-          // On Windows: download and run the installer silently
-          log.info("Installing Ollama on Windows...");
+          log.info("Ollama not found, installing on Windows...");
           await execAsync(
             `powershell -Command "` +
             `$url = 'https://ollama.com/download/OllamaSetup.exe'; ` +
@@ -59,32 +98,42 @@ export function createOllamaRouter(): Router {
             `Invoke-WebRequest -Uri $url -OutFile $out; ` +
             `Start-Process -FilePath $out -ArgumentList '/S' -Wait"`
           );
-          installed = true;
+          ollamaBin = "ollama";
         } else {
-          res.status(503).json({ error: "Unsupported platform for auto-install. Install Ollama from https://ollama.com" });
+          res.status(503).json({ error: "Unsupported platform. Install Ollama from https://ollama.com" });
           return;
         }
       } catch (err: any) {
         log.error("Ollama install failed:", err?.message);
         res.status(500).json({
-          error: `Ollama installation failed: ${err?.message}. Please install manually from https://ollama.com`,
+          error: `Ollama not found and auto-install failed. Please install manually from https://ollama.com\n\nError: ${err?.message}`,
         });
         return;
       }
     }
 
-    // Start ollama serve as detached background process
+    // Launch Ollama
     try {
-      log.info("Starting ollama serve...");
-      const child = spawn("ollama", ["serve"], {
-        detached: true,
-        stdio: "ignore",
-        shell: platform === "win32",
-      });
-      child.unref();
+      if (ollamaIsApp) {
+        // macOS: launch the .app (it starts the server automatically)
+        log.info("Launching Ollama.app via open command...");
+        const child = spawn("open", ["-a", "Ollama"], { detached: true, stdio: "ignore" });
+        child.unref();
+      } else {
+        // CLI binary: run ollama serve
+        log.info(`Starting ollama serve (bin: ${ollamaBin})...`);
+        const bin = ollamaBin ?? "ollama";
+        const child = spawn(bin, ["serve"], {
+          detached: true,
+          stdio: "ignore",
+          shell: platform === "win32",
+          env: { ...process.env, PATH: `/usr/local/bin:/usr/bin:/bin:${process.env["PATH"] ?? ""}` },
+        });
+        child.unref();
+      }
 
-      // Wait up to 8s for it to come up
-      for (let i = 0; i < 16; i++) {
+      // Wait up to 10s for the server to come up
+      for (let i = 0; i < 20; i++) {
         await new Promise((r) => setTimeout(r, 500));
         try {
           const check = await fetch("http://localhost:11434/");
@@ -95,9 +144,9 @@ export function createOllamaRouter(): Router {
         } catch {}
       }
 
-      res.status(504).json({ error: "Ollama process started but not responding yet. Try again in a few seconds." });
+      res.status(504).json({ error: "Ollama launched but not responding yet. Give it a few more seconds and try again." });
     } catch (err: any) {
-      log.error("ollama serve failed:", err?.message);
+      log.error("Ollama launch failed:", err?.message);
       res.status(500).json({ error: `Failed to start Ollama: ${err?.message}` });
     }
   });
