@@ -314,6 +314,7 @@ async function loadAgents() {
       return;
     }
     const SKILL_LABELS = {
+      'monitor-mode': '📡 Monitor Mode',
       'terminal': '🖥️ Terminal',
       'screen-capture': '📸 Screen Capture',
       'screen-control': '🖱️ Screen Control',
@@ -482,6 +483,73 @@ function escapeHtml(text) {
 let agentChatAgents = [];
 let agentChatMsgCounter = 0;
 
+// --- Monitor Mode live feed ---
+let monitorFeedTimer = null;
+let monitorIntervalMs = 3000;
+let monitorExpanded = false;
+let monitorLastTs = 0;
+
+function startMonitorFeed() {
+  const panel = document.getElementById('monitor-panel');
+  const overlay = document.getElementById('monitor-overlay');
+  panel.style.display = 'block';
+  overlay.style.display = 'flex';
+  document.getElementById('monitor-fps-label').textContent = 'Connecting...';
+  document.getElementById('monitor-live-dot').style.background = '#f59e0b';
+  stopMonitorFeed(true);
+  fetchMonitorFrame();
+  monitorFeedTimer = setInterval(fetchMonitorFrame, monitorIntervalMs);
+}
+
+function stopMonitorFeed(keepPanel) {
+  if (monitorFeedTimer) { clearInterval(monitorFeedTimer); monitorFeedTimer = null; }
+  if (!keepPanel) {
+    document.getElementById('monitor-panel').style.display = 'none';
+    document.getElementById('monitor-img').src = '';
+    document.getElementById('monitor-live-dot').style.background = '#ef4444';
+    document.getElementById('monitor-fps-label').textContent = 'Off';
+  }
+}
+
+async function fetchMonitorFrame() {
+  try {
+    const t0 = Date.now();
+    const data = await api('/agents/screen-live');
+    const elapsed = Date.now() - t0;
+    const img = document.getElementById('monitor-img');
+    const overlay = document.getElementById('monitor-overlay');
+    img.src = data.image;
+    overlay.style.display = 'none';
+    document.getElementById('monitor-live-dot').style.background = '#22c55e';
+    document.getElementById('monitor-fps-label').textContent = `${elapsed}ms · ${new Date().toLocaleTimeString()}`;
+    monitorLastTs = data.timestamp;
+  } catch (err) {
+    document.getElementById('monitor-live-dot').style.background = '#ef4444';
+    document.getElementById('monitor-fps-label').textContent = 'Error — retrying...';
+  }
+}
+
+function setMonitorInterval(ms) {
+  monitorIntervalMs = ms;
+  if (monitorFeedTimer) { stopMonitorFeed(true); monitorFeedTimer = setInterval(fetchMonitorFrame, monitorIntervalMs); }
+}
+
+function toggleMonitorExpand() {
+  monitorExpanded = !monitorExpanded;
+  const wrap = document.getElementById('monitor-img-wrap');
+  const img = document.getElementById('monitor-img');
+  const btn = document.getElementById('monitor-expand-btn');
+  if (monitorExpanded) {
+    wrap.style.maxHeight = '70vh';
+    img.style.maxHeight = '70vh';
+    btn.textContent = 'Collapse';
+  } else {
+    wrap.style.maxHeight = '220px';
+    img.style.maxHeight = '220px';
+    btn.textContent = 'Expand';
+  }
+}
+
 async function loadAgentChatList() {
   try {
     const data = await api('/agents');
@@ -497,20 +565,46 @@ async function loadAgentChatList() {
 
 document.getElementById('agent-chat-select').addEventListener('change', updateAgentChatInfo);
 
+const AGENT_SKILL_LABELS = {
+  'monitor-mode': '📡 Monitor Mode',
+  'terminal': '🖥️ Terminal',
+  'screen-capture': '📸 Screen Capture',
+  'screen-control': '🖱️ Screen Control',
+  'web-search': '🔍 Web Search',
+  'file-manager': '📁 Files',
+  'code-execution': '⚡ Code Exec',
+  'github': '🐙 GitHub',
+  'google-drive': '📄 Google Drive',
+  'vercel': '▲ Vercel',
+  'netlify': '🌐 Netlify',
+  'docker': '🐳 Docker'
+};
+
 function updateAgentChatInfo() {
   const sel = document.getElementById('agent-chat-select');
   const info = document.getElementById('agent-chat-info');
   const agent = agentChatAgents.find(a => a.id === sel.value);
   if (agent) {
+    const skills = agent.skills || [];
+    const skillBadges = skills.length
+      ? skills.map(s => `<span style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.35);border-radius:4px;padding:1px 6px;font-size:0.75rem">${AGENT_SKILL_LABELS[s] || s}</span>`).join(' ')
+      : '<span style="color:var(--text-dim);font-size:0.75rem">No skills</span>';
     info.innerHTML = `
       <span><strong>${agent.name}</strong></span>
       <span class="agent-chat-meta">${agent.model_provider}/${agent.model_name}</span>
       <span class="agent-chat-meta">Temp: ${agent.temperature}</span>
-      <span class="agent-chat-meta">Skills: ${(agent.skills?.length || 0)}</span>
+      <span class="agent-chat-meta" style="display:flex;align-items:center;gap:0.3rem;flex-wrap:wrap">${skillBadges}</span>
       ${agent.description ? `<span class="agent-chat-meta">${agent.description}</span>` : ''}
     `;
+    // Start or stop monitor feed based on skill
+    if (skills.includes('monitor-mode')) {
+      startMonitorFeed();
+    } else {
+      stopMonitorFeed();
+    }
   } else {
     info.innerHTML = '';
+    stopMonitorFeed();
   }
 }
 

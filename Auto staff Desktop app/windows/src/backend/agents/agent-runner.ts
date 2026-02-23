@@ -11,7 +11,7 @@ import {
   addMessage,
 } from "../database/sessions.js";
 import { buildSkillsPrompt } from "./skills-loader.js";
-import { buildIntegrationToolsPrompt, executeToolCalls } from "../integrations/agent-tools.js";
+import { buildIntegrationToolsPrompt, executeToolCalls, captureCurrentScreen } from "../integrations/agent-tools.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("agent-runner");
@@ -63,12 +63,31 @@ export async function runAgent(
   const historyLimit = getHistoryLimit(agent);
   const history = getSessionHistory(db, session.id, historyLimit);
 
+  // Determine effective provider/model early (needed for monitor-mode vision injection)
+  const effectiveProvider = input.providerOverride ?? (agent.model_provider as ProviderName);
+  const effectiveModel = input.modelOverride ?? agent.model_name;
+
   // Build messages array for the LLM
   let systemPrompt = buildSystemPrompt(agent, input);
 
   // Add tools context (web tools always available; integration tools if user has connected accounts)
   const toolsPrompt = buildIntegrationToolsPrompt(db, input.userId || "");
   if (toolsPrompt) systemPrompt += toolsPrompt;
+
+  // Monitor mode: auto-capture screen and inject into context before every turn
+  const agentSkillsList = (() => { try { return JSON.parse(agent.skills) as string[]; } catch { return [] as string[]; } })();
+  let monitorScreenshot: { path: string; base64: string } | null = null;
+  if (agentSkillsList.includes("monitor-mode")) {
+    monitorScreenshot = await captureCurrentScreen();
+    if (monitorScreenshot) {
+      systemPrompt +=
+        `\n\n## Monitor Mode — Live Screen Feed Active\n` +
+        `A fresh screenshot of the current screen is automatically captured before every message turn. ` +
+        `You can see the live state of the desktop. Use screen_control tools (screen_mouse_click, screen_key, screen_type, screen_scroll, screen_mouse_move) to interact with it. ` +
+        `You do NOT need to call [[TOOL:screen_capture]] — the screen state is already provided to you.\n` +
+        `Current screen captured at: ${new Date().toISOString()}`;
+    }
+  }
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -81,17 +100,28 @@ export async function runAgent(
     });
   }
 
+  // For vision-capable providers, inject the monitor screenshot as an image in the latest user turn
+  if (monitorScreenshot && ["openai", "anthropic", "google"].includes(effectiveProvider)) {
+    const lastUserIdx = messages.map(m => m.role).lastIndexOf("user");
+    if (lastUserIdx >= 0) {
+      const originalText = messages[lastUserIdx].content as string;
+      messages[lastUserIdx] = {
+        role: "user",
+        content: [
+          { type: "text", text: `[Monitor Mode — current screen]:` },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${monitorScreenshot.base64}` } },
+          { type: "text", text: originalText },
+        ] as any,
+      };
+    }
+  }
+
   // Call the LLM
   log.info(
-    `Running agent "${agent.name}" (${agent.model_provider}/${agent.model_name}) for chat ${input.chatId}`
+    `Running agent "${agent.name}" (${effectiveProvider}/${effectiveModel}) for chat ${input.chatId}`
   );
 
   try {
-    const effectiveProvider = input.providerOverride ?? (agent.model_provider as ProviderName);
-    const effectiveModel = input.modelOverride ?? agent.model_name;
-
-    log.info(`Calling ${effectiveProvider}/${effectiveModel}`);
-
     const result = await chatCompletion(
       effectiveProvider,
       {

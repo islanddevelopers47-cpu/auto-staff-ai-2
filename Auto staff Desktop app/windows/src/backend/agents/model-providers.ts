@@ -366,12 +366,21 @@ async function moonshotCompletion(
       messages: options.messages,
       temperature: 1,
       max_tokens: options.maxTokens ?? 4096,
+      safe_mode: false,
     }),
   });
 
   if (!response.ok) {
     const body = await response.text();
     log.error(`Moonshot API error ${response.status}: ${body}`);
+    let parsed: any = {};
+    try { parsed = JSON.parse(body); } catch {}
+    if (response.status === 400 && parsed?.error?.type === "content_filter") {
+      throw new Error(
+        "Kimi content filter blocked this message. Try rephrasing — avoid mentioning specific websites or brand names in automation tasks. " +
+        "For example, say 'open a private/incognito browser window' instead of naming a specific site."
+      );
+    }
     throw new Error(`Moonshot API error: ${response.status} ${body}`);
   }
 

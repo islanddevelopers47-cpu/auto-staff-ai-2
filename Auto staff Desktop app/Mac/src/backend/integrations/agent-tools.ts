@@ -20,8 +20,44 @@ const execAsync = promisify(exec);
 
 const log = createLogger("agent-tools");
 
-// Tool call pattern: [[TOOL:action|param1|param2|...]]
-const TOOL_PATTERN = /\[\[TOOL:(\w+)\|([^\]]*)\]\]/g;
+/**
+ * Capture the current screen and return the file path + base64 JPEG.
+ * Used by monitor-mode and the screen-live API endpoint.
+ */
+export async function captureCurrentScreen(): Promise<{ path: string; base64: string } | null> {
+  const platform = os.platform();
+  const tmpPath = path.join(os.tmpdir(), `monitor-${Date.now()}.jpg`);
+  try {
+    if (platform === "darwin") {
+      await execAsync(`screencapture -x -t jpg "${tmpPath}"`);
+    } else if (platform === "win32") {
+      await execAsync(
+        `powershell -Command "Add-Type -AssemblyName System.Windows.Forms, System.Drawing; ` +
+        `$screen = [System.Windows.Forms.Screen]::PrimaryScreen; ` +
+        `$bmp = New-Object System.Drawing.Bitmap($screen.Bounds.Width, $screen.Bounds.Height); ` +
+        `$g = [System.Drawing.Graphics]::FromImage($bmp); ` +
+        `$g.CopyFromScreen($screen.Bounds.Location, [System.Drawing.Point]::Empty, $screen.Bounds.Size); ` +
+        `$enc = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object {$_.FormatDescription -eq 'JPEG'}; ` +
+        `$params = New-Object System.Drawing.Imaging.EncoderParameters(1); ` +
+        `$params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, 75L); ` +
+        `$bmp.Save('${tmpPath.replace(/'/g, "''")}', $enc, $params); ` +
+        `$g.Dispose(); $bmp.Dispose()"`
+      );
+    } else {
+      return null;
+    }
+    if (fs.existsSync(tmpPath)) {
+      const data = fs.readFileSync(tmpPath);
+      return { path: tmpPath, base64: data.toString("base64") };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Tool call pattern: [[TOOL:action]] or [[TOOL:action|param1|param2|...]]
+const TOOL_PATTERN = /\[\[TOOL:(\w+)(?:\|([^\]]*))?\]\]/g;
 
 export interface ToolResult {
   tool: string;

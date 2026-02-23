@@ -1,10 +1,12 @@
 import { Router } from "express";
 import type Database from "better-sqlite3";
+import * as fs from "node:fs";
 import type { AgentRegistry } from "../../agents/agent-registry.js";
 import { createAgent, findAgentById, updateAgent, deleteAgent } from "../../database/agents.js";
 import { getAvailableProviders, getDefaultModels, resolveApiKeyForUser, findFallbackProviderForUser, type ProviderName } from "../../agents/model-providers.js";
 import { runAgent } from "../../agents/agent-runner.js";
 import { authMiddleware } from "../../auth/middleware.js";
+import { captureCurrentScreen } from "../../integrations/agent-tools.js";
 
 export function createAgentsRouter(db: Database.Database, agentRegistry: AgentRegistry): Router {
   const router = Router();
@@ -155,6 +157,23 @@ export function createAgentsRouter(db: Database.Database, agentRegistry: AgentRe
     const name = String(req.params.name) as ProviderName;
     const models = getDefaultModels(name);
     res.json({ provider: name, models });
+  });
+
+  // Live screen feed for Monitor Mode — captures and returns current screen as base64 JPEG
+  router.get("/agents/screen-live", authMiddleware, async (_req, res) => {
+    try {
+      const screenshot = await captureCurrentScreen();
+      if (!screenshot) {
+        res.status(503).json({ error: "Screen capture not available on this platform" });
+        return;
+      }
+      const dataUrl = `data:image/jpeg;base64,${screenshot.base64}`;
+      // Clean up temp file
+      try { fs.unlinkSync(screenshot.path); } catch {}
+      res.json({ image: dataUrl, timestamp: Date.now() });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message ?? "Screen capture failed" });
+    }
   });
 
   // Direct agent chat — runs agent pipeline without a bot

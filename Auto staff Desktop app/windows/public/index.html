@@ -301,6 +301,11 @@
               <div class="field">
                 <label>Skills <span style="color:var(--text-dim);font-weight:400">(select capabilities for this agent)</span></label>
                 <div id="agent-skills-list" style="display:flex;flex-direction:column;gap:0.45rem;max-height:220px;overflow-y:auto;padding:0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+                  <label class="skill-checkbox" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.35rem 0.5rem;border-radius:6px;transition:background 0.15s;border:1px solid rgba(var(--primary-rgb,99,102,241),0.3);background:rgba(var(--primary-rgb,99,102,241),0.05)" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(var(--primary-rgb,99,102,241),0.05)'">
+                    <input type="checkbox" value="monitor-mode" style="accent-color:var(--primary);width:16px;height:16px">
+                    <span>📡 <strong>Monitor Mode</strong></span>
+                    <span style="color:var(--text-dim);font-size:0.8rem;margin-left:auto">Live screen feed (AnyDesk-style)</span>
+                  </label>
                   <label class="skill-checkbox" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.35rem 0.5rem;border-radius:6px;transition:background 0.15s" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
                     <input type="checkbox" value="terminal" style="accent-color:var(--primary);width:16px;height:16px">
                     <span>🖥️ <strong>Terminal / PowerShell</strong></span>
@@ -388,6 +393,31 @@
           <button id="agent-chat-clear" class="btn btn-sm">Clear</button>
         </div>
         <div id="agent-chat-info" class="agent-chat-info"></div>
+
+        <!-- Monitor Mode live feed panel — shown only when agent has monitor-mode skill -->
+        <div id="monitor-panel" style="display:none;margin:0.5rem 0;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg-card)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:0.45rem 0.75rem;background:rgba(0,0,0,0.2);border-bottom:1px solid var(--border)">
+            <span style="display:flex;align-items:center;gap:0.5rem;font-size:0.82rem;font-weight:600">
+              <span id="monitor-live-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444"></span>
+              📡 Monitor Mode — Live Screen Feed
+            </span>
+            <div style="display:flex;align-items:center;gap:0.6rem">
+              <span id="monitor-fps-label" style="font-size:0.75rem;color:var(--text-dim)">Connecting...</span>
+              <select id="monitor-interval-select" style="font-size:0.75rem;padding:0.15rem 0.3rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="setMonitorInterval(parseInt(this.value))">
+                <option value="2000">2s</option>
+                <option value="3000" selected>3s</option>
+                <option value="5000">5s</option>
+                <option value="10000">10s</option>
+              </select>
+              <button class="btn btn-sm" onclick="toggleMonitorExpand()" id="monitor-expand-btn" style="padding:0.15rem 0.5rem;font-size:0.75rem">Expand</button>
+            </div>
+          </div>
+          <div id="monitor-img-wrap" style="position:relative;max-height:220px;overflow:hidden;transition:max-height 0.3s ease">
+            <img id="monitor-img" src="" alt="Live screen" style="width:100%;display:block;object-fit:contain;max-height:220px">
+            <div id="monitor-overlay" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);font-size:0.85rem;color:#fff">Capturing screen...</div>
+          </div>
+        </div>
+
         <div id="agent-chat-messages" class="chat-box"></div>
         <form id="agent-chat-form" class="chat-input">
           <input type="text" id="agent-chat-input" placeholder="Type a message to the agent..." autocomplete="off">
