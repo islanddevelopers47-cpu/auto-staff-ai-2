@@ -275,6 +275,9 @@
                   <option value="anthropic">Anthropic</option>
                   <option value="google">Google</option>
                   <option value="grok">Grok (xAI)</option>
+                  <option value="moonshot">Kimi (Moonshot) — Free</option>
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="minimax">MiniMax</option>
                 </select>
               </div>
               <div class="field">
@@ -773,6 +776,80 @@
             </div>
           </div>
 
+          <!-- Kimi / Moonshot (FREE) -->
+          <div class="provider-row" onclick="this.classList.toggle('expanded')">
+            <div class="provider-row-main">
+              <div class="provider-row-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" opacity=".7"/><path d="M8 12a4 4 0 0 1 8 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".7"/><circle cx="12" cy="8" r="2" fill="currentColor" opacity=".7"/></svg>
+              </div>
+              <div class="provider-row-info">
+                <h4>Kimi (Moonshot) <span class="provider-badge" style="background:#22c55e;color:#fff">FREE</span> <span id="moonshot-status" class="provider-badge">Not configured</span></h4>
+                <p>Kimi K2.5, K2 — free high-quality AI with 256K context from Moonshot AI</p>
+              </div>
+            </div>
+            <div class="provider-row-expand" onclick="event.stopPropagation()">
+              <form class="api-key-form" data-provider="moonshot">
+                <div class="provider-key-row">
+                  <input type="password" class="api-key-input" placeholder="sk-..." autocomplete="off">
+                  <button type="button" class="btn btn-sm toggle-visibility">Show</button>
+                  <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                  <button type="button" class="btn btn-sm btn-danger api-key-delete" style="display:none">Remove</button>
+                </div>
+                <div class="api-key-msg"></div>
+              </form>
+              <p class="provider-key-help">Get your free key at <a href="https://platform.moonshot.ai/console/api-keys" target="_blank">platform.moonshot.ai</a> — Kimi K2.5 is completely free to use!</p>
+            </div>
+          </div>
+
+          <!-- DeepSeek -->
+          <div class="provider-row" onclick="this.classList.toggle('expanded')">
+            <div class="provider-row-main">
+              <div class="provider-row-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z" fill="currentColor" opacity=".7"/></svg>
+              </div>
+              <div class="provider-row-info">
+                <h4>DeepSeek <span id="deepseek-status" class="provider-badge">Not configured</span></h4>
+                <p>DeepSeek Chat, Coder, Reasoner — strong open-weight models for coding and reasoning</p>
+              </div>
+            </div>
+            <div class="provider-row-expand" onclick="event.stopPropagation()">
+              <form class="api-key-form" data-provider="deepseek">
+                <div class="provider-key-row">
+                  <input type="password" class="api-key-input" placeholder="sk-..." autocomplete="off">
+                  <button type="button" class="btn btn-sm toggle-visibility">Show</button>
+                  <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                  <button type="button" class="btn btn-sm btn-danger api-key-delete" style="display:none">Remove</button>
+                </div>
+                <div class="api-key-msg"></div>
+              </form>
+              <p class="provider-key-help">Get your key at <a href="https://platform.deepseek.com/api_keys" target="_blank">platform.deepseek.com</a></p>
+            </div>
+          </div>
+
+          <!-- MiniMax -->
+          <div class="provider-row" onclick="this.classList.toggle('expanded')">
+            <div class="provider-row-main">
+              <div class="provider-row-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5" opacity=".7"/><path d="M8 8h8M8 12h8M8 16h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".7"/></svg>
+              </div>
+              <div class="provider-row-info">
+                <h4>MiniMax <span id="minimax-status" class="provider-badge">Not configured</span></h4>
+                <p>MiniMax M2.5, M2.1 — fast and capable models with 200K context window</p>
+              </div>
+            </div>
+            <div class="provider-row-expand" onclick="event.stopPropagation()">
+              <form class="api-key-form" data-provider="minimax">
+                <div class="provider-key-row">
+                  <input type="password" class="api-key-input" placeholder="eyJ..." autocomplete="off">
+                  <button type="button" class="btn btn-sm toggle-visibility">Show</button>
+                  <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                  <button type="button" class="btn btn-sm btn-danger api-key-delete" style="display:none">Remove</button>
+                </div>
+                <div class="api-key-msg"></div>
+              </form>
+              <p class="provider-key-help">Get your key at <a href="https://www.minimax.io" target="_blank">minimax.io</a></p>
+            </div>
+          </div>
 
         </div>
 

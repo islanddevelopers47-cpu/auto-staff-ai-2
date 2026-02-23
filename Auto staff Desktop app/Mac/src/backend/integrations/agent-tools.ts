@@ -10,10 +10,13 @@ import { resolveIntegrationCred } from "../database/integration-config.js";
 import { updateAccessToken } from "../database/connected-accounts.js";
 import { createLogger } from "../utils/logger.js";
 import { webSearch, webFetch } from "./web-search.js";
-import { executeCommand, getSystemInfo, whichBinary } from "../local/shell-executor.js";
-import * as localFs from "../local/file-system.js";
-import { processManager } from "../local/process-manager.js";
-import { checkBinary, checkBinaries, installBinary } from "../local/dependency-checker.js";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as fs from "node:fs";
+
+const execAsync = promisify(exec);
 
 const log = createLogger("agent-tools");
 
@@ -101,49 +104,32 @@ export function buildIntegrationToolsPrompt(db: Database.Database, userId: strin
     prompt += "- `[[TOOL:docker_list_images]]` — List Docker images\n\n";
   }
 
-  // Local tools — always available on desktop
-  prompt += "## Local Shell (macOS Host Machine)\n\n";
-  prompt += "You can execute commands directly on the user's Mac. Use these tools:\n";
-  prompt += "- `[[TOOL:shell_exec|command]]` — Execute a shell command and get the output. Default timeout 30s.\n";
-  prompt += "- `[[TOOL:shell_exec_cwd|command|working_directory]]` — Execute a command in a specific directory.\n";
-  prompt += "- `[[TOOL:shell_exec_timeout|command|timeout_ms]]` — Execute with a custom timeout (max 300000ms).\n";
-  prompt += "- `[[TOOL:which|binary_name]]` — Check if a binary/tool is installed.\n";
-  prompt += "- `[[TOOL:system_info]]` — Get system info (OS, arch, username, home dir, shell).\n\n";
+  // Screen capture — always available on desktop
+  prompt += "## Screen Capture\n\n";
+  prompt += "Available tools:\n";
+  prompt += "- `[[TOOL:screen_capture|filename]]` — Capture a screenshot of the entire screen. Saves to the temp directory and returns the file path. The filename is optional (defaults to screenshot.png).\n";
+  prompt += "- `[[TOOL:screen_capture_window|app_name|filename]]` — Capture a screenshot of a specific application window (macOS only). The filename is optional.\n";
+  prompt += "- `[[TOOL:screen_list_windows]]` — List all visible windows with their app names and titles.\n\n";
 
-  prompt += "## File System\n\n";
-  prompt += "You can read and write files on the user's machine:\n";
-  prompt += "- `[[TOOL:fs_list|path]]` — List files in a directory (use ~ for home).\n";
-  prompt += "- `[[TOOL:fs_list_hidden|path]]` — List files including hidden ones.\n";
-  prompt += "- `[[TOOL:fs_read|path]]` — Read a file's contents.\n";
-  prompt += "- `[[TOOL:fs_write|path|content]]` — Write content to a file (creates parent dirs).\n";
-  prompt += "- `[[TOOL:fs_append|path|content]]` — Append content to a file.\n";
-  prompt += "- `[[TOOL:fs_mkdir|path]]` — Create a directory.\n";
-  prompt += "- `[[TOOL:fs_delete|path]]` — Delete a file or empty directory.\n";
-  prompt += "- `[[TOOL:fs_move|from|to]]` — Move or rename a file/directory.\n";
-  prompt += "- `[[TOOL:fs_copy|from|to]]` — Copy a file.\n";
-  prompt += "- `[[TOOL:fs_find|directory|pattern]]` — Search for files by name pattern.\n\n";
+  // Terminal execution — always available on desktop
+  const platform = os.platform();
+  const shellName = platform === "win32" ? "PowerShell" : "Terminal (bash/zsh)";
+  prompt += `## ${shellName} Execution\n\n`;
+  prompt += "Available tools:\n";
+  prompt += "- `[[TOOL:shell_exec|command]]` — Execute a shell command and return the output (stdout + stderr). ";
+  if (platform === "win32") {
+    prompt += "Commands run in PowerShell.\n";
+  } else {
+    prompt += "Commands run in the default shell (bash/zsh).\n";
+  }
+  prompt += "- `[[TOOL:shell_exec_bg|command]]` — Execute a command in the background (non-blocking). Returns immediately with the process ID.\n";
+  prompt += "- `[[TOOL:shell_read_file|filepath]]` — Read the contents of a file on the local filesystem.\n";
+  prompt += "- `[[TOOL:shell_write_file|filepath|content]]` — Write content to a file on the local filesystem.\n";
+  prompt += "- `[[TOOL:shell_list_dir|dirpath]]` — List files and directories at the given path.\n\n";
+  prompt += "**Security**: Shell commands are sandboxed to the user's workspace. Do not execute destructive commands without explicit user confirmation.\n\n";
 
-  prompt += "## Background Processes\n\n";
-  prompt += "You can manage long-running background tasks:\n";
-  prompt += "- `[[TOOL:proc_start|command]]` — Start a command as a background process.\n";
-  prompt += "- `[[TOOL:proc_start_cwd|command|working_directory]]` — Start in a specific directory.\n";
-  prompt += "- `[[TOOL:proc_stop|process_id]]` — Stop a background process.\n";
-  prompt += "- `[[TOOL:proc_status|process_id]]` — Check process status and recent output.\n";
-  prompt += "- `[[TOOL:proc_output|process_id|tail_lines]]` — Get recent output lines.\n";
-  prompt += "- `[[TOOL:proc_input|process_id|input_text]]` — Send input to a running process.\n";
-  prompt += "- `[[TOOL:proc_list]]` — List all managed background processes.\n\n";
-
-  prompt += "## Dependency Management\n\n";
-  prompt += "- `[[TOOL:dep_check|binary_name]]` — Check if a tool/binary is installed.\n";
-  prompt += "- `[[TOOL:dep_check_multi|name1,name2,...]]` — Check multiple binaries at once.\n";
-  prompt += "- `[[TOOL:dep_install|binary_name]]` — Install a missing tool via Homebrew.\n\n";
-
-  prompt += "**Important rules:**\n";
-  prompt += "- You can use multiple tools in sequence (multi-step reasoning). After getting a tool result, decide what to do next.\n";
-  prompt += "- When executing commands, explain what you're doing and show the output.\n";
-  prompt += "- For destructive operations (delete, overwrite), confirm with the user first unless they've explicitly asked.\n";
-  prompt += "- File paths starting with ~ are resolved to the user's home directory.\n";
-  prompt += "- The system will execute tools and return results. Use them to complete complex tasks step by step.\n";
+  prompt += "**Important**: Only use one tool at a time. Wait for the result before using another tool.\n";
+  prompt += "When you use a tool, explain to the user what you're doing.\n";
 
   return prompt;
 }
@@ -445,6 +431,240 @@ async function executeTool(
     }
   }
 
+  // Screen capture tools — always available on desktop
+  if (action.startsWith("screen_")) {
+    const platform = os.platform();
+    const tmpDir = os.tmpdir();
+
+    switch (action) {
+      case "screen_capture": {
+        const filename = params[0] || `screenshot-${Date.now()}.png`;
+        const outPath = path.join(tmpDir, filename);
+
+        if (platform === "darwin") {
+          await execAsync(`screencapture -x "${outPath}"`);
+        } else if (platform === "win32") {
+          await execAsync(
+            `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; ` +
+            `$screen = [System.Windows.Forms.Screen]::PrimaryScreen; ` +
+            `$bitmap = New-Object System.Drawing.Bitmap($screen.Bounds.Width, $screen.Bounds.Height); ` +
+            `$graphics = [System.Drawing.Graphics]::FromImage($bitmap); ` +
+            `$graphics.CopyFromScreen($screen.Bounds.Location, [System.Drawing.Point]::Empty, $screen.Bounds.Size); ` +
+            `$bitmap.Save('${outPath.replace(/'/g, "''")}'); ` +
+            `$graphics.Dispose(); $bitmap.Dispose()"`
+          );
+        } else {
+          // Linux fallback
+          try {
+            await execAsync(`import -window root "${outPath}"`);
+          } catch {
+            return "Screen capture is not supported on this platform. Install ImageMagick for Linux support.";
+          }
+        }
+
+        if (fs.existsSync(outPath)) {
+          const stats = fs.statSync(outPath);
+          return `Screenshot captured: ${outPath} (${(stats.size / 1024).toFixed(1)} KB)`;
+        }
+        return "Screenshot capture failed — file was not created.";
+      }
+      case "screen_capture_window": {
+        const appName = params[0];
+        const filename = params[1] || `window-${Date.now()}.png`;
+        const outPath = path.join(tmpDir, filename);
+
+        if (!appName) return "Error: app_name is required";
+
+        if (platform === "darwin") {
+          // Use screencapture with window selection by app name
+          const script = `
+            tell application "System Events"
+              set frontApp to name of first application process whose frontmost is true
+            end tell
+            tell application "${appName.replace(/"/g, '\\"')}" to activate
+            delay 0.5
+          `;
+          try {
+            await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
+            await execAsync(`screencapture -x -l $(osascript -e 'tell application "System Events" to id of first window of application process "${appName.replace(/"/g, '\\"')}"') "${outPath}" 2>/dev/null || screencapture -x "${outPath}"`);
+          } catch {
+            // Fallback to full screen capture
+            await execAsync(`screencapture -x "${outPath}"`);
+          }
+        } else {
+          return "Window-specific capture is only available on macOS. Use screen_capture for full screen.";
+        }
+
+        if (fs.existsSync(outPath)) {
+          const stats = fs.statSync(outPath);
+          return `Window screenshot captured for "${appName}": ${outPath} (${(stats.size / 1024).toFixed(1)} KB)`;
+        }
+        return "Window screenshot capture failed.";
+      }
+      case "screen_list_windows": {
+        if (platform === "darwin") {
+          try {
+            const { stdout } = await execAsync(
+              `osascript -e 'tell application "System Events" to get {name, title} of every window of every application process whose visible is true' 2>/dev/null || echo "[]"`
+            );
+            // More reliable approach using CGWindowListCopyWindowInfo
+            const { stdout: windowList } = await execAsync(
+              `python3 -c "
+import Quartz, json
+windows = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID)
+result = []
+for w in windows:
+    owner = w.get('kCGWindowOwnerName', '')
+    name = w.get('kCGWindowName', '')
+    if owner and name:
+        result.append(f'{owner}: {name}')
+print('\\n'.join(result[:30]))
+" 2>/dev/null || echo "Could not list windows"`
+            );
+            return `Visible windows:\n${windowList.trim() || "No windows found"}`;
+          } catch {
+            return "Could not list windows. Ensure accessibility permissions are granted.";
+          }
+        } else if (platform === "win32") {
+          try {
+            const { stdout } = await execAsync(
+              `powershell -Command "Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | Select-Object -First 30 ProcessName, MainWindowTitle | Format-Table -AutoSize | Out-String"`
+            );
+            return `Visible windows:\n${stdout.trim()}`;
+          } catch {
+            return "Could not list windows.";
+          }
+        }
+        return "Window listing is not supported on this platform.";
+      }
+      default:
+        return `Unknown screen tool: ${action}`;
+    }
+  }
+
+  // Shell / Terminal execution tools — always available on desktop
+  if (action.startsWith("shell_")) {
+    const platform = os.platform();
+    const TIMEOUT_MS = 30000; // 30 second timeout for commands
+    const MAX_OUTPUT = 8000; // Max characters of output to return
+
+    switch (action) {
+      case "shell_exec": {
+        const command = params[0];
+        if (!command) return "Error: command is required";
+
+        // Security: block obviously destructive patterns
+        const dangerous = [
+          /\brm\s+-rf\s+[\/~]/i,
+          /\bformat\b.*\/[a-z]/i,
+          /\bmkfs\b/i,
+          /\bdd\s+if=/i,
+          />\s*\/dev\/sd/i,
+        ];
+        for (const pattern of dangerous) {
+          if (pattern.test(command)) {
+            return "Error: This command has been blocked for safety. Destructive filesystem commands require explicit user confirmation.";
+          }
+        }
+
+        try {
+          const shell = platform === "win32" ? "powershell.exe" : "/bin/bash";
+          const shellArgs = platform === "win32"
+            ? ["-NoProfile", "-Command", command]
+            : ["-c", command];
+
+          const { stdout, stderr } = await execAsync(command, {
+            timeout: TIMEOUT_MS,
+            maxBuffer: 1024 * 1024,
+            shell: shell,
+            env: { ...process.env, TERM: "dumb" },
+          });
+
+          let output = stdout || "";
+          if (stderr) output += (output ? "\n\n" : "") + `STDERR:\n${stderr}`;
+
+          if (output.length > MAX_OUTPUT) {
+            output = output.slice(0, MAX_OUTPUT) + `\n\n... (output truncated, ${output.length} total chars)`;
+          }
+          return output || "(command completed with no output)";
+        } catch (err: any) {
+          const output = (err.stdout || "") + (err.stderr ? `\nSTDERR: ${err.stderr}` : "");
+          return `Command failed (exit code ${err.code ?? "unknown"}):\n${output.slice(0, MAX_OUTPUT) || err.message}`;
+        }
+      }
+      case "shell_exec_bg": {
+        const command = params[0];
+        if (!command) return "Error: command is required";
+
+        try {
+          const shell = platform === "win32" ? "powershell.exe" : "/bin/bash";
+          const child = exec(command, { shell, env: { ...process.env, TERM: "dumb" } });
+          const pid = child.pid;
+          child.unref();
+          return `Background process started with PID: ${pid}`;
+        } catch (err: any) {
+          return `Failed to start background process: ${err.message}`;
+        }
+      }
+      case "shell_read_file": {
+        const filepath = params[0];
+        if (!filepath) return "Error: filepath is required";
+
+        try {
+          const resolved = path.resolve(filepath);
+          const stats = fs.statSync(resolved);
+          if (stats.size > 512 * 1024) {
+            return `Error: File is too large (${(stats.size / 1024).toFixed(1)} KB). Max 512 KB.`;
+          }
+          const content = fs.readFileSync(resolved, "utf-8");
+          return `File: ${resolved} (${stats.size} bytes)\n\`\`\`\n${content.slice(0, MAX_OUTPUT)}\n\`\`\``;
+        } catch (err: any) {
+          return `Error reading file: ${err.message}`;
+        }
+      }
+      case "shell_write_file": {
+        const filepath = params[0];
+        const content = params.slice(1).join("|"); // rejoin in case content contains |
+        if (!filepath) return "Error: filepath is required";
+
+        try {
+          const resolved = path.resolve(filepath);
+          const dir = path.dirname(resolved);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          fs.writeFileSync(resolved, content, "utf-8");
+          return `File written: ${resolved} (${Buffer.byteLength(content, "utf-8")} bytes)`;
+        } catch (err: any) {
+          return `Error writing file: ${err.message}`;
+        }
+      }
+      case "shell_list_dir": {
+        const dirpath = params[0] || ".";
+        try {
+          const resolved = path.resolve(dirpath);
+          const entries = fs.readdirSync(resolved, { withFileTypes: true });
+          const list = entries.slice(0, 100).map((e) => {
+            const icon = e.isDirectory() ? "📁" : "📄";
+            let size = "";
+            if (!e.isDirectory()) {
+              try {
+                const s = fs.statSync(path.join(resolved, e.name));
+                size = ` (${(s.size / 1024).toFixed(1)} KB)`;
+              } catch { /* ignore */ }
+            }
+            return `${icon} ${e.name}${size}`;
+          });
+          return `Contents of ${resolved}:\n${list.join("\n") || "(empty directory)"}`;
+        } catch (err: any) {
+          return `Error listing directory: ${err.message}`;
+        }
+      }
+      default:
+        return `Unknown shell tool: ${action}`;
+    }
+  }
+
   // Web tools — always available, no account needed
   if (action === "web_search") {
     const query = params[0];
@@ -473,269 +693,5 @@ async function executeTool(
     }
   }
 
-  // --- Local Shell tools ---
-  if (action === "shell_exec") {
-    const cmd = params[0];
-    if (!cmd) return "Error: command is required";
-    const result = await executeCommand(cmd);
-    const output = result.stdout || result.stderr || "(no output)";
-    return `Command: ${cmd}\nExit code: ${result.exitCode}${result.killed ? " (killed — timeout)" : ""}\nDuration: ${result.durationMs}ms\n\`\`\`\n${output.slice(0, 8000)}\n\`\`\``;
-  }
-
-  if (action === "shell_exec_cwd") {
-    const [cmd, cwd] = params;
-    if (!cmd) return "Error: command is required";
-    const resolvedCwd = (cwd || "").replace(/^~/, process.env.HOME || "");
-    const result = await executeCommand(cmd, { cwd: resolvedCwd || undefined });
-    const output = result.stdout || result.stderr || "(no output)";
-    return `Command: ${cmd}\nCWD: ${resolvedCwd}\nExit code: ${result.exitCode}${result.killed ? " (killed)" : ""}\nDuration: ${result.durationMs}ms\n\`\`\`\n${output.slice(0, 8000)}\n\`\`\``;
-  }
-
-  if (action === "shell_exec_timeout") {
-    const [cmd, timeoutStr] = params;
-    if (!cmd) return "Error: command is required";
-    const timeout = parseInt(timeoutStr || "30000", 10);
-    const result = await executeCommand(cmd, { timeout });
-    const output = result.stdout || result.stderr || "(no output)";
-    return `Command: ${cmd}\nExit code: ${result.exitCode}${result.killed ? " (killed — timeout)" : ""}\nDuration: ${result.durationMs}ms\n\`\`\`\n${output.slice(0, 8000)}\n\`\`\``;
-  }
-
-  if (action === "which") {
-    const name = params[0];
-    if (!name) return "Error: binary name is required";
-    const binPath = whichBinary(name);
-    return binPath ? `${name} found at: ${binPath}` : `${name} is NOT installed`;
-  }
-
-  if (action === "system_info") {
-    const info = getSystemInfo();
-    return Object.entries(info).map(([k, v]) => `${k}: ${v}`).join("\n");
-  }
-
-  // --- File System tools ---
-  if (action === "fs_list" || action === "fs_list_hidden") {
-    const dirPath = (params[0] || "~").replace(/^~/, process.env.HOME || "");
-    try {
-      const files = localFs.listDirectory(dirPath, action === "fs_list_hidden");
-      if (files.length === 0) return `Directory is empty: ${dirPath}`;
-      const list = files.map(f => {
-        const icon = f.type === "directory" ? "📁" : f.type === "symlink" ? "🔗" : "📄";
-        const size = f.type === "file" ? ` (${formatSize(f.size)})` : "";
-        return `${icon} ${f.name}${size}`;
-      });
-      return `Contents of ${dirPath}:\n${list.join("\n")}`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "fs_read") {
-    const filePath = (params[0] || "").replace(/^~/, process.env.HOME || "");
-    if (!filePath) return "Error: file path is required";
-    try {
-      const file = localFs.readFile(filePath);
-      return `File: ${file.path} (${formatSize(file.size)})\n\`\`\`\n${file.content.slice(0, 10000)}\n\`\`\``;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "fs_write") {
-    const [filePath, ...contentParts] = params;
-    const resolvedPath = (filePath || "").replace(/^~/, process.env.HOME || "");
-    if (!resolvedPath) return "Error: file path is required";
-    const content = contentParts.join("|"); // rejoin in case content had | chars
-    try {
-      const result = localFs.writeFile(resolvedPath, content);
-      return `Written ${formatSize(result.size)} to ${result.path}`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "fs_append") {
-    const [filePath, ...contentParts] = params;
-    const resolvedPath = (filePath || "").replace(/^~/, process.env.HOME || "");
-    if (!resolvedPath) return "Error: file path is required";
-    const content = contentParts.join("|");
-    try {
-      const result = localFs.appendFile(resolvedPath, content);
-      return `Appended to ${result.path} (total ${formatSize(result.size)})`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "fs_mkdir") {
-    const dirPath = (params[0] || "").replace(/^~/, process.env.HOME || "");
-    if (!dirPath) return "Error: directory path is required";
-    try {
-      const result = localFs.createDirectory(dirPath);
-      return `Directory created: ${result.path}`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "fs_delete") {
-    const targetPath = (params[0] || "").replace(/^~/, process.env.HOME || "");
-    if (!targetPath) return "Error: path is required";
-    try {
-      const result = localFs.deleteItem(targetPath);
-      return `Deleted: ${result.path}`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "fs_move") {
-    const fromPath = (params[0] || "").replace(/^~/, process.env.HOME || "");
-    const toPath = (params[1] || "").replace(/^~/, process.env.HOME || "");
-    if (!fromPath || !toPath) return "Error: both from and to paths are required";
-    try {
-      const result = localFs.moveItem(fromPath, toPath);
-      return `Moved: ${result.from} → ${result.to}`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "fs_copy") {
-    const fromPath = (params[0] || "").replace(/^~/, process.env.HOME || "");
-    const toPath = (params[1] || "").replace(/^~/, process.env.HOME || "");
-    if (!fromPath || !toPath) return "Error: both from and to paths are required";
-    try {
-      const result = localFs.copyItem(fromPath, toPath);
-      return `Copied: ${result.from} → ${result.to}`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "fs_find") {
-    const dirPath = (params[0] || "~").replace(/^~/, process.env.HOME || "");
-    const pattern = params[1];
-    if (!pattern) return "Error: search pattern is required";
-    try {
-      const results = localFs.findFiles(dirPath, pattern);
-      if (results.length === 0) return `No files matching '${pattern}' in ${dirPath}`;
-      return `Found ${results.length} file(s) matching '${pattern}':\n${results.join("\n")}`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  // --- Background Process tools ---
-  if (action === "proc_start" || action === "proc_start_cwd") {
-    const cmd = params[0];
-    if (!cmd) return "Error: command is required";
-    const cwd = action === "proc_start_cwd" ? (params[1] || "").replace(/^~/, process.env.HOME || "") : undefined;
-    try {
-      const proc = processManager.start(cmd, { cwd: cwd || undefined });
-      return `Process started:\n  ID: ${proc.id}\n  PID: ${proc.pid}\n  Command: ${proc.command}\n  CWD: ${proc.cwd}\n  Status: ${proc.status}`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "proc_stop") {
-    const id = params[0];
-    if (!id) return "Error: process_id is required";
-    try {
-      const stopped = processManager.stop(id);
-      return stopped ? `Process ${id} stopped.` : `Process ${id} is not running.`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "proc_status") {
-    const id = params[0];
-    if (!id) return "Error: process_id is required";
-    try {
-      const proc = processManager.getProcess(id);
-      if (!proc) return `Process not found: ${id}`;
-      const output = processManager.getOutput(id, 10);
-      let text = `Process ${proc.id}:\n  Command: ${proc.command}\n  PID: ${proc.pid}\n  Status: ${proc.status}\n  Started: ${proc.startedAt}`;
-      if (proc.stoppedAt) text += `\n  Stopped: ${proc.stoppedAt}`;
-      if (proc.exitCode !== undefined) text += `\n  Exit code: ${proc.exitCode}`;
-      if (output.stdout.length > 0) text += `\n  Recent output:\n\`\`\`\n${output.stdout.join("\n")}\n\`\`\``;
-      if (output.stderr.length > 0) text += `\n  Recent errors:\n\`\`\`\n${output.stderr.join("\n")}\n\`\`\``;
-      return text;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "proc_output") {
-    const [id, tailStr] = params;
-    if (!id) return "Error: process_id is required";
-    try {
-      const tail = parseInt(tailStr || "50", 10);
-      const output = processManager.getOutput(id, tail);
-      const combined = [...output.stdout.map(l => l), ...output.stderr.map(l => `[stderr] ${l}`)];
-      return combined.length > 0 ? `Output (last ${tail} lines):\n\`\`\`\n${combined.join("\n")}\n\`\`\`` : "(no output yet)";
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "proc_input") {
-    const [id, ...inputParts] = params;
-    if (!id) return "Error: process_id is required";
-    const input = inputParts.join("|") + "\n";
-    try {
-      const sent = processManager.sendInput(id, input);
-      return sent ? `Sent input to process ${id}` : `Failed to send input (process may not be running)`;
-    } catch (err: any) {
-      return `Error: ${err.message}`;
-    }
-  }
-
-  if (action === "proc_list") {
-    const procs = processManager.listProcesses();
-    if (procs.length === 0) return "No managed processes.";
-    const list = procs.map(p =>
-      `- ${p.id} [${p.status}] PID:${p.pid} — ${p.command.slice(0, 80)}`
-    );
-    return `Managed processes (${procs.length}):\n${list.join("\n")}`;
-  }
-
-  // --- Dependency tools ---
-  if (action === "dep_check") {
-    const name = params[0];
-    if (!name) return "Error: binary name is required";
-    const result = checkBinary(name);
-    if (result.found) {
-      return `✅ ${name} is installed at ${result.path}${result.version ? ` (${result.version})` : ""}`;
-    }
-    return `❌ ${name} is NOT installed`;
-  }
-
-  if (action === "dep_check_multi") {
-    const names = (params[0] || "").split(",").map(s => s.trim()).filter(Boolean);
-    if (names.length === 0) return "Error: provide comma-separated binary names";
-    const results = checkBinaries(names);
-    const lines = results.map(r =>
-      r.found ? `✅ ${r.name} — ${r.path}` : `❌ ${r.name} — NOT installed`
-    );
-    return lines.join("\n");
-  }
-
-  if (action === "dep_install") {
-    const name = params[0];
-    if (!name) return "Error: binary name is required";
-    const result = await installBinary(name);
-    return result.success ? `✅ ${result.message}` : `❌ ${result.message}`;
-  }
-
   return `Unknown tool: ${action}`;
-}
-
-function formatSize(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }

@@ -340,7 +340,10 @@ const MODELS = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
   anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
   google: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-  grok: ['grok-3', 'grok-3-mini', 'grok-2', 'grok-2-mini']
+  grok: ['grok-3', 'grok-3-mini', 'grok-2', 'grok-2-mini'],
+  moonshot: ['kimi-k2.5', 'kimi-k2', 'moonshot-v1-auto'],
+  deepseek: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+  minimax: ['MiniMax-M2.5', 'MiniMax-M2.1', 'MiniMax-M2.1-lightning']
 };
 
 document.getElementById('agent-provider').addEventListener('change', () => {

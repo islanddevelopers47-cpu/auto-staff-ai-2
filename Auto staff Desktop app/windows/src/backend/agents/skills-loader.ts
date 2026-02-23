@@ -110,7 +110,7 @@ function parseMetadataBlock(raw: string | undefined): {
  * Load all skills from the skills directory.
  */
 export function loadSkillsFromDir(skillsDir?: string): SkillDefinition[] {
-  const dir = skillsDir ?? (process.env.SKILLS_DIR || path.resolve(process.cwd(), "skills"));
+  const dir = skillsDir ?? path.resolve(process.cwd(), "skills");
   if (!fs.existsSync(dir)) {
     log.info(`Skills directory not found: ${dir}`);
     return [];
