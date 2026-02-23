@@ -78,25 +78,45 @@ export async function chatCompletion(
   options: ChatCompletionOptions,
   apiKeyOverride?: string
 ): Promise<ChatCompletionResult> {
-  switch (provider) {
-    case "openai":
-      return openaiCompletion(options, apiKeyOverride);
-    case "anthropic":
-      return anthropicCompletion(options, apiKeyOverride);
-    case "google":
-      return googleCompletion(options, apiKeyOverride);
-    case "ollama":
-      return ollamaCompletion(options);
-    case "grok":
-      return grokCompletion(options, apiKeyOverride);
-    case "moonshot":
-      return moonshotCompletion(options, apiKeyOverride);
-    case "deepseek":
-      return deepseekCompletion(options, apiKeyOverride);
-    case "minimax":
-      return minimaxCompletion(options, apiKeyOverride);
-    default:
-      throw new Error(`Unsupported provider: ${provider}`);
+  try {
+    switch (provider) {
+      case "openai":
+        return await openaiCompletion(options, apiKeyOverride);
+      case "anthropic":
+        return await anthropicCompletion(options, apiKeyOverride);
+      case "google":
+        return await googleCompletion(options, apiKeyOverride);
+      case "ollama":
+        return await ollamaCompletion(options);
+      case "grok":
+        return await grokCompletion(options, apiKeyOverride);
+      case "moonshot":
+        return await moonshotCompletion(options, apiKeyOverride);
+      case "deepseek":
+        return await deepseekCompletion(options, apiKeyOverride);
+      case "minimax":
+        return await minimaxCompletion(options, apiKeyOverride);
+      default:
+        throw new Error(`Unsupported provider: ${provider}`);
+    }
+  } catch (err: any) {
+    // Unwrap Node.js 'fetch failed' TCP errors (ECONNREFUSED, ENOTFOUND, etc.)
+    if (err?.message === "fetch failed" || err?.message?.startsWith("fetch failed")) {
+      const cause = err?.cause;
+      const causeMsg = cause?.message ?? cause?.code ?? String(cause ?? "");
+      const config = getProviderConfig(provider);
+      if (provider === "ollama") {
+        throw new Error(
+          `Cannot connect to Ollama at ${config.baseUrl}. Make sure Ollama is running (Settings → Start Ollama).` +
+          (causeMsg ? ` Cause: ${causeMsg}` : "")
+        );
+      }
+      throw new Error(
+        `Cannot connect to ${provider} API at ${config.baseUrl}. Check your internet connection.` +
+        (causeMsg ? ` Cause: ${causeMsg}` : "")
+      );
+    }
+    throw err;
   }
 }
 

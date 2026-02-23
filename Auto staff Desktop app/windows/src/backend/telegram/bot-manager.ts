@@ -294,8 +294,22 @@ export class BotManager {
           `Please check your API key in the Claw Staffer dashboard → Settings → API Keys.`;
       } else if (errMsg.includes("429") || errMsg.includes("rate limit")) {
         userMessage = "⏳ Rate limit reached. Please wait a moment and try again.";
-      } else if (errMsg.includes("timeout") || errMsg.includes("ECONNREFUSED")) {
-        userMessage = `🔌 Could not connect to ${provider}. The service may be down. Please try again later.`;
+      } else if (
+        errMsg.includes("Cannot connect to Ollama") ||
+        (errMsg.includes("fetch failed") && provider === "ollama") ||
+        (errMsg.includes("ECONNREFUSED") && errMsg.includes("11434"))
+      ) {
+        userMessage =
+          `🦙 Ollama is not running.\n\n` +
+          `Open the Claw Staffer app → Settings → Start Ollama, then try again.`;
+      } else if (
+        errMsg.includes("Cannot connect") ||
+        errMsg.includes("fetch failed") ||
+        errMsg.includes("ECONNREFUSED") ||
+        errMsg.includes("ENOTFOUND") ||
+        errMsg.includes("timeout")
+      ) {
+        userMessage = `🔌 Could not reach ${provider} API. Check your internet connection and try again.\n\nDetails: ${errMsg}`;
       } else {
         userMessage = `❌ Error processing your message: ${errMsg}`;
       }
