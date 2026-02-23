@@ -112,17 +112,16 @@ export function createOllamaRouter(): Router {
       }
     }
 
-    // Launch Ollama
+    // Launch Ollama — fire and forget, respond immediately
+    // (macOS app can take 15-30s to fully start; status check handles confirmation)
     try {
       if (ollamaIsApp) {
-        // macOS: launch the .app (it starts the server automatically)
         log.info("Launching Ollama.app via open command...");
         const child = spawn("open", ["-a", "Ollama"], { detached: true, stdio: "ignore" });
         child.unref();
       } else {
-        // CLI binary: run ollama serve
-        log.info(`Starting ollama serve (bin: ${ollamaBin})...`);
         const bin = ollamaBin ?? "ollama";
+        log.info(`Starting ollama serve (bin: ${bin})...`);
         const child = spawn(bin, ["serve"], {
           detached: true,
           stdio: "ignore",
@@ -132,19 +131,10 @@ export function createOllamaRouter(): Router {
         child.unref();
       }
 
-      // Wait up to 10s for the server to come up
-      for (let i = 0; i < 20; i++) {
-        await new Promise((r) => setTimeout(r, 500));
-        try {
-          const check = await fetch("http://localhost:11434/");
-          if (check.ok) {
-            res.json({ ok: true, message: "Ollama started successfully on http://localhost:11434" });
-            return;
-          }
-        } catch {}
-      }
-
-      res.status(504).json({ error: "Ollama launched but not responding yet. Give it a few more seconds and try again." });
+      res.json({
+        ok: true,
+        message: "Ollama is launching. It may take 15–30 seconds to start. Click 'Check Status' to confirm it's running.",
+      });
     } catch (err: any) {
       log.error("Ollama launch failed:", err?.message);
       res.status(500).json({ error: `Failed to start Ollama: ${err?.message}` });
