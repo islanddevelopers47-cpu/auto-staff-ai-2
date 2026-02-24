@@ -584,6 +584,18 @@ async function loadSessionMessages(sessionId) {
   }
 }
 
+async function clearBotSession() {
+  if (!botChatsSelectedSessionId) return;
+  if (!confirm('Clear all messages in this conversation?')) return;
+  try {
+    await api(`/sessions/${botChatsSelectedSessionId}/messages`, { method: 'DELETE' });
+    document.getElementById('bot-chats-messages').innerHTML =
+      '<div style="color:var(--text-dim);font-size:0.85rem">Conversation cleared.</div>';
+    await loadBotSessions(botChatsSelectedBotId);
+  } catch (err) { alert('Failed to clear: ' + err.message); }
+}
+window.clearBotSession = clearBotSession;
+
 // Live refresh: when session:message WS event fires for the selected bot/session, reload
 function handleBotChatsWsEvent(event, data) {
   if (event !== 'session:message') return;
@@ -752,9 +764,13 @@ document.getElementById('agent-chat-form').addEventListener('submit', async (e) 
   }
 });
 
-document.getElementById('agent-chat-clear').addEventListener('click', () => {
+document.getElementById('agent-chat-clear').addEventListener('click', async () => {
+  const agentId = document.getElementById('agent-chat-select').value;
   document.getElementById('agent-chat-messages').innerHTML = '';
   agentChatMsgCounter = 0;
+  if (agentId) {
+    try { await api(`/agents/${agentId}/chat`, { method: 'DELETE' }); } catch {}
+  }
 });
 
 function addAgentChatMessage(role, text) {

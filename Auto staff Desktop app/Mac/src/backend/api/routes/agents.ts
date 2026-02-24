@@ -7,6 +7,7 @@ import { getAvailableProviders, getDefaultModels, resolveApiKeyForUser, findFall
 import { runAgent } from "../../agents/agent-runner.js";
 import { authMiddleware } from "../../auth/middleware.js";
 import { captureCurrentScreen } from "../../integrations/agent-tools.js";
+import { clearSessionHistory } from "../../database/sessions.js";
 
 export function createAgentsRouter(db: Database.Database, agentRegistry: AgentRegistry): Router {
   const router = Router();
@@ -233,6 +234,20 @@ export function createAgentsRouter(db: Database.Database, agentRegistry: AgentRe
     } catch (err: any) {
       res.status(500).json({ error: err?.message ?? "Agent chat failed" });
     }
+  });
+
+  // Clear saved chat history for a direct agent chat session
+  router.delete("/agents/:id/chat", authMiddleware, (req, res) => {
+    const agentId = String(req.params.id);
+    const userId = req.user!.userId;
+    const chatId = `agent-chat-${userId}-${agentId}`;
+    const session = db
+      .prepare("SELECT id FROM sessions WHERE bot_id IS NULL AND chat_id = ?")
+      .get(chatId) as { id: string } | undefined;
+    if (session) {
+      clearSessionHistory(db, session.id);
+    }
+    res.json({ ok: true });
   });
 
   return router;

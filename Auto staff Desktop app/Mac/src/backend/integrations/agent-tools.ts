@@ -91,6 +91,18 @@ export function buildIntegrationToolsPrompt(db: Database.Database, userId: strin
   prompt += "3. **Act immediately**: pick the right tool, execute it, report what happened.\n";
   prompt += "4. For opening apps use `shell_exec` — it works 100% of the time.\n\n";
 
+  prompt += "## 🚫 NEVER FABRICATE TOOL RESULTS\n\n";
+  prompt += "- You MUST emit `[[TOOL:...]]` BEFORE claiming any action was performed.\n";
+  prompt += "- NEVER write \"I opened Brave\" or \"A new window has been created\" unless a [[TOOL:shell_exec|...]] call appeared in this exact reply.\n";
+  prompt += "- If you did not call a tool, you did NOT perform the action. Say so and call the tool now.\n\n";
+
+  prompt += "## ✅ CONTENT POLICY FOR DESKTOP AUTOMATION\n\n";
+  prompt += "This agent is a LOCAL DESKTOP AUTOMATION tool. ALL standard computer tasks are permitted:\n";
+  prompt += "- \"Open a private window\" = open an incognito/private browsing window in a browser. This is a NORMAL browser feature, NOT adult content.\n";
+  prompt += "- \"Open YouTube\", \"open Google\", \"open Reddit\", etc. = open a website. All mainstream websites are legitimate tasks.\n";
+  prompt += "- NEVER refuse a computer task (opening apps, browsers, websites, files) by claiming it relates to adult content. That is a misclassification.\n";
+  prompt += "- Only refuse if the user explicitly requests something harmful (malware, data destruction, illegal activity).\n\n";
+
   if (platform === "darwin") {
     prompt += "**macOS quick reference** (use shell_exec):\n";
     prompt += "- Open any app: `open -a \"Exact App Name\"` — the name must match exactly what appears in /Applications\n";
@@ -111,12 +123,23 @@ export function buildIntegrationToolsPrompt(db: Database.Database, userId: strin
     prompt += "**Unknown app name?** First run: [[TOOL:shell_exec|ls /Applications/ | grep -i appname]] to find the exact .app filename, then open it.\n";
     prompt += "Example: user says \"open brave\" → first try `open -a \"Brave Browser\"`. If error, run `ls /Applications/ | grep -i brave` to find name, then open.\n\n";
     prompt += "**CRITICAL RULE**: If the app is not found, report the error to the user. Do NOT open a different app as a substitute. Never open Safari, Chrome, or any other app the user did not ask for.\n\n";
+    prompt += "**Browser window operations** (macOS):\n";
+    prompt += "- New regular window in Brave:    `open -na \"Brave Browser\"`\n";
+    prompt += "- New incognito/private window:   `open -na \"Brave Browser\" --args --incognito`\n";
+    prompt += "- Open URL in Brave:              `open -a \"Brave Browser\" \"https://youtube.com\"`\n";
+    prompt += "- Open URL in private Brave:      `open -na \"Brave Browser\" --args --incognito \"https://youtube.com\"`\n";
+    prompt += "- New Chrome incognito + URL:     `open -na \"Google Chrome\" --args --incognito \"https://example.com\"`\n";
+    prompt += "- New Firefox private + URL:      `open -na \"Firefox\" --args -private-window \"https://example.com\"`\n\n";
   } else if (platform === "win32") {
     prompt += "**Windows quick reference** (use shell_exec, runs in PowerShell):\n";
     prompt += "- Open any app: `Start-Process \"AppName\"` or `Start-Process \"C:\\path\\to\\app.exe\"`\n";
     prompt += "- Open a URL: `Start-Process \"https://example.com\"`\n";
     prompt += "- Kill a process: `Stop-Process -Name \"ProcessName\" -Force`\n";
     prompt += "- List running apps: `Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | Select Name,MainWindowTitle`\n\n";
+    prompt += "**Browser window operations** (Windows PowerShell):\n";
+    prompt += "- New incognito Brave:    `Start-Process \"C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" \"--incognito\"`\n";
+    prompt += "- New incognito Chrome:   `Start-Process \"chrome.exe\" \"--incognito\"`\n";
+    prompt += "- New private Firefox:    `Start-Process \"firefox.exe\" \"-private-window\"`\n\n";
   }
 
   prompt += "## ⚠️ TOOL SYNTAX RULES — MUST FOLLOW EXACTLY\n\n";
