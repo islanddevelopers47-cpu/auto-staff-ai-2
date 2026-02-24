@@ -9,7 +9,8 @@ struct AgentsListView: View {
         ZStack {
                 Color(red: 0.08, green: 0.04, blue: 0.12).ignoresSafeArea()
 
-                if agentsVM.agents.isEmpty && !agentsVM.isLoading {
+                let visibleAgents = agentsVM.agents.filter { !$0.isBuiltin }
+                if visibleAgents.isEmpty && !agentsVM.isLoading {
                     VStack(spacing: 16) {
                         Image(systemName: "person.2.slash")
                             .font(.system(size: 48))
@@ -34,7 +35,7 @@ struct AgentsListView: View {
                     }
                 } else {
                     List {
-                        ForEach(agentsVM.agents) { agent in
+                        ForEach(agentsVM.agents.filter { !$0.isBuiltin }) { agent in
                             NavigationLink(value: agent) {
                                 AgentListRow(agent: agent)
                             }
@@ -136,15 +137,6 @@ struct AgentListRow: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
-                    if agent.isBuiltin {
-                        Text("Built-in")
-                            .font(.caption2)
-                            .foregroundColor(.orange)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.15))
-                            .cornerRadius(4)
-                    }
                 }
                 if let desc = agent.description, !desc.isEmpty {
                     Text(desc)
