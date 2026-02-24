@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/
+*.db
+release/
+out/
+build/
+*.deb
+*.AppImage
+*.snap
+firebase-service-account.json
+.env

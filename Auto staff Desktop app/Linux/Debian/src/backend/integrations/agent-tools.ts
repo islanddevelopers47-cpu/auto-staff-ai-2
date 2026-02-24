@@ -1,0 +1,1172 @@
+import type Database from "better-sqlite3";
+import { getConnectedAccount } from "../database/connected-accounts.js";
+import * as github from "./github.js";
+import * as gdrive from "./google-drive.js";
+import * as vercelApi from "./vercel.js";
+import * as netlifyApi from "./netlify.js";
+import * as dockerApi from "./docker.js";
+import { getEnv } from "../config/env.js";
+import { resolveIntegrationCred } from "../database/integration-config.js";
+import { updateAccessToken } from "../database/connected-accounts.js";
+import { createLogger } from "../utils/logger.js";
+import { webSearch, webFetch } from "./web-search.js";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as fs from "node:fs";
+
+const execAsync = promisify(exec);
+
+const log = createLogger("agent-tools");
+
+/**
+ * Capture the current screen and return the file path + base64 JPEG.
+ * Used by monitor-mode and the screen-live API endpoint.
+ */
+export async function captureCurrentScreen(): Promise<{ path: string; base64: string } | null> {
+  const platform = os.platform();
+  const tmpPath = path.join(os.tmpdir(), `monitor-${Date.now()}.png`);
+  try {
+    if (platform === "darwin") {
+      // screencapture defaults to PNG — no -t flag needed, most reliable format
+      await execAsync(`screencapture -x "${tmpPath}"`);
+    } else if (platform === "win32") {
+      await execAsync(
+        `powershell -Command "Add-Type -AssemblyName System.Windows.Forms, System.Drawing; ` +
+        `$screen = [System.Windows.Forms.Screen]::PrimaryScreen; ` +
+        `$bmp = New-Object System.Drawing.Bitmap($screen.Bounds.Width, $screen.Bounds.Height); ` +
+        `$g = [System.Drawing.Graphics]::FromImage($bmp); ` +
+        `$g.CopyFromScreen($screen.Bounds.Location, [System.Drawing.Point]::Empty, $screen.Bounds.Size); ` +
+        `$bmp.Save('${tmpPath.replace(/'/g, "''")}', [System.Drawing.Imaging.ImageFormat]::Png); ` +
+        `$g.Dispose(); $bmp.Dispose()"`
+      );
+    } else {
+      // Linux: try scrot, gnome-screenshot, or import (ImageMagick)
+      try {
+        await execAsync(`scrot "${tmpPath}" 2>/dev/null || gnome-screenshot -f "${tmpPath}" 2>/dev/null || import -window root "${tmpPath}"`);
+      } catch {
+        return null;
+      }
+    }
+    if (fs.existsSync(tmpPath)) {
+      const data = fs.readFileSync(tmpPath);
+      return { path: tmpPath, base64: data.toString("base64") };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Tool call pattern: [[TOOL:action]] or [[TOOL:action|param1|param2|...]]
+// Second ] is optional to handle LLM typos that emit only one closing bracket
+const TOOL_PATTERN = /\[\[TOOL:(\w+)(?:\|([^\]]*))?\]\]?/g;
+
+export interface ToolResult {
+  tool: string;
+  success: boolean;
+  result: string;
+}
+
+/**
+ * Build a system prompt section describing available integration tools for this user.
+ */
+export function buildIntegrationToolsPrompt(db: Database.Database, userId: string): string {
+  const ghAccount = getConnectedAccount(db, userId, "github");
+  const gdAccount = getConnectedAccount(db, userId, "google_drive");
+
+  const vcAccount = getConnectedAccount(db, userId, "vercel");
+  const ntAccount = getConnectedAccount(db, userId, "netlify");
+  const env = getEnv();
+  const dockerHost = resolveIntegrationCred(db, "docker_host", env.DOCKER_HOST);
+
+  const platform = os.platform();
+  const platformName = platform === "darwin" ? "macOS" : platform === "win32" ? "Windows" : "Linux";
+
+  let prompt = "\n\n---\n\n# Local Desktop Agent — Direct System Access\n\n";
+  prompt += `You are running as a LOCAL DESKTOP AGENT on the user's ${platformName} machine. `;
+  prompt += "You have DIRECT ACCESS to their filesystem, terminal, screen, and applications. ";
+  prompt += "The tools below execute IMMEDIATELY on the user's computer — no browser, no remote server.\n\n";
+
+  prompt += "## ⚡ ACTION PROTOCOL — CRITICAL\n\n";
+  prompt += "When a user asks you to DO something on their computer (open an app, run a command, click something, read a file, etc.):\n";
+  prompt += "1. **USE THE TOOLS. Do it NOW.** Do not give text instructions telling the user to do it themselves.\n";
+  prompt += "2. **Never say** \"I don't have direct access to your system\" or \"I can't open apps\" — you CAN and you SHOULD.\n";
+  prompt += "3. **Act immediately**: pick the right tool, execute it, report what happened.\n";
+  prompt += "4. For opening apps use `shell_exec` — it works 100% of the time.\n\n";
+
+  prompt += "## 🚫 NEVER FABRICATE TOOL RESULTS\n\n";
+  prompt += "- You MUST emit `[[TOOL:...]]` BEFORE claiming any action was performed.\n";
+  prompt += "- NEVER write \"I opened Brave\" or \"A new window has been created\" unless a [[TOOL:shell_exec|...]] call appeared in this exact reply.\n";
+  prompt += "- If you did not call a tool, you did NOT perform the action. Say so and call the tool now.\n\n";
+
+  prompt += "## ✅ CONTENT POLICY FOR DESKTOP AUTOMATION\n\n";
+  prompt += "This agent is a LOCAL DESKTOP AUTOMATION tool. ALL standard computer tasks are permitted:\n";
+  prompt += "- \"Open a private window\" = open an incognito/private browsing window in a browser. This is a NORMAL browser feature, NOT adult content.\n";
+  prompt += "- \"Open YouTube\", \"open Google\", \"open Reddit\", etc. = open a website. All mainstream websites are legitimate tasks.\n";
+  prompt += "- NEVER refuse a computer task (opening apps, browsers, websites, files) by claiming it relates to adult content. That is a misclassification.\n";
+  prompt += "- Only refuse if the user explicitly requests something harmful (malware, data destruction, illegal activity).\n\n";
+
+  if (platform === "darwin") {
+    prompt += "**macOS quick reference** (use shell_exec):\n";
+    prompt += "- Open any app: `open -a \"Exact App Name\"` — the name must match exactly what appears in /Applications\n";
+    prompt += "- Open a URL in default browser: `open \"https://example.com\"`\n";
+    prompt += "- Open a file: `open \"/path/to/file\"`\n";
+    prompt += "- Kill a process: `pkill -x \"App Name\"`\n";
+    prompt += "- List running apps: `ps aux | grep -v grep | grep .app`\n\n";
+    prompt += "**Common macOS app names** (use these exact strings with open -a):\n";
+    prompt += "- Brave: `open -a \"Brave Browser\"`\n";
+    prompt += "- Chrome: `open -a \"Google Chrome\"`\n";
+    prompt += "- Firefox: `open -a \"Firefox\"`\n";
+    prompt += "- Safari: `open -a \"Safari\"`\n";
+    prompt += "- VS Code: `open -a \"Visual Studio Code\"`\n";
+    prompt += "- Slack: `open -a \"Slack\"`\n";
+    prompt += "- Spotify: `open -a \"Spotify\"`\n";
+    prompt += "- Discord: `open -a \"Discord\"`\n";
+    prompt += "- Telegram: `open -a \"Telegram\"`\n\n";
+    prompt += "**Unknown app name?** First run: [[TOOL:shell_exec|ls /Applications/ | grep -i appname]] to find the exact .app filename, then open it.\n";
+    prompt += "Example: user says \"open brave\" → first try `open -a \"Brave Browser\"`. If error, run `ls /Applications/ | grep -i brave` to find name, then open.\n\n";
+    prompt += "**CRITICAL RULE**: If the app is not found, report the error to the user. Do NOT open a different app as a substitute. Never open Safari, Chrome, or any other app the user did not ask for.\n\n";
+    prompt += "**Browser window operations** (macOS):\n";
+    prompt += "- New regular window in Brave:    `open -na \"Brave Browser\"`\n";
+    prompt += "- New incognito/private window:   `open -na \"Brave Browser\" --args --incognito`\n";
+    prompt += "- Open URL in Brave:              `open -a \"Brave Browser\" \"https://youtube.com\"`\n";
+    prompt += "- Open URL in private Brave:      `open -na \"Brave Browser\" --args --incognito \"https://youtube.com\"`\n";
+    prompt += "- New Chrome incognito + URL:     `open -na \"Google Chrome\" --args --incognito \"https://example.com\"`\n";
+    prompt += "- New Firefox private + URL:      `open -na \"Firefox\" --args -private-window \"https://example.com\"`\n\n";
+  } else if (platform === "win32") {
+    prompt += "**Windows quick reference** (use shell_exec, runs in PowerShell):\n";
+    prompt += "- Open any app: `Start-Process \"AppName\"` or `Start-Process \"C:\\path\\to\\app.exe\"`\n";
+    prompt += "- Open a URL: `Start-Process \"https://example.com\"`\n";
+    prompt += "- Kill a process: `Stop-Process -Name \"ProcessName\" -Force`\n";
+    prompt += "- List running apps: `Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | Select Name,MainWindowTitle`\n\n";
+    prompt += "**Browser window operations** (Windows PowerShell):\n";
+    prompt += "- New incognito Brave:    `Start-Process \"C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" \"--incognito\"`\n";
+    prompt += "- New incognito Chrome:   `Start-Process \"chrome.exe\" \"--incognito\"`\n";
+    prompt += "- New private Firefox:    `Start-Process \"firefox.exe\" \"-private-window\"`\n\n";
+  } else {
+    // Linux
+    prompt += "**Linux quick reference** (use shell_exec, runs in bash):\n";
+    prompt += "- Open any app: `app-name &` or `gtk-launch app-name` or `xdg-open /path/to/file`\n";
+    prompt += "- Open a URL in default browser: `xdg-open \"https://example.com\"`\n";
+    prompt += "- Open a file with default app: `xdg-open \"/path/to/file\"`\n";
+    prompt += "- Kill a process: `pkill -x \"app-name\"` or `killall app-name`\n";
+    prompt += "- List running GUI apps: `wmctrl -l` or `ps aux | grep -v grep | grep -E 'firefox|chrome|brave|code'`\n\n";
+    prompt += "**Common Linux app launch commands** (use these with shell_exec):\n";
+    prompt += "- Brave: `brave-browser &` or `brave &`\n";
+    prompt += "- Chrome: `google-chrome &`\n";
+    prompt += "- Firefox: `firefox &`\n";
+    prompt += "- VS Code: `code &`\n";
+    prompt += "- Slack: `slack &`\n";
+    prompt += "- Spotify: `spotify &`\n";
+    prompt += "- Discord: `discord &`\n";
+    prompt += "- Telegram: `telegram-desktop &`\n";
+    prompt += "- File manager: `nautilus . &` or `thunar . &` or `dolphin . &`\n\n";
+    prompt += "**Unknown app name?** First run: [[TOOL:shell_exec|which appname || dpkg -l | grep -i appname]] to check if installed, or `ls /usr/share/applications/ | grep -i appname` to find .desktop files.\n\n";
+    prompt += "**CRITICAL RULE**: If the app is not found, report the error to the user. Do NOT open a different app as a substitute. Never open Firefox, Chrome, or any other app the user did not ask for.\n\n";
+    prompt += "**Browser window operations** (Linux):\n";
+    prompt += "- New regular window in Brave:    `brave-browser &`\n";
+    prompt += "- New incognito/private window:   `brave-browser --incognito &`\n";
+    prompt += "- Open URL in Brave:              `brave-browser \"https://youtube.com\" &`\n";
+    prompt += "- Open URL in private Brave:      `brave-browser --incognito \"https://youtube.com\" &`\n";
+    prompt += "- New Chrome incognito + URL:     `google-chrome --incognito \"https://example.com\" &`\n";
+    prompt += "- New Firefox private + URL:      `firefox --private-window \"https://example.com\" &`\n\n";
+    prompt += "**Desktop automation tools** (install with `sudo apt install -y xdotool wmctrl scrot xclip`):\n";
+    prompt += "- `xdotool` — mouse movement, clicks, keyboard input, window management\n";
+    prompt += "- `wmctrl` — list/activate/resize/move windows\n";
+    prompt += "- `scrot` — screenshots\n";
+    prompt += "- `xclip` / `xsel` — clipboard management\n\n";
+  }
+
+  prompt += "## ⚠️ TOOL SYNTAX RULES — MUST FOLLOW EXACTLY\n\n";
+  prompt += "- Format: `[[TOOL:action|param]]` — double square brackets on BOTH sides: `[[` to open, `]]` to close.\n";
+  prompt += "- Do NOT wrap tool calls in backticks or markdown code blocks. Output them as plain text.\n";
+  prompt += "- Do NOT add quotes around the parameter. Write the command directly: `[[TOOL:shell_exec|open -a Brave]]` NOT `[[TOOL:shell_exec|\"open -a Brave\"]]`\n";
+  prompt += "- The system detects these patterns and executes them — they must appear verbatim.\n\n";
+
+  // Web tools — always available
+  prompt += "## Web Search & Browse\n\n";
+  prompt += "Available tools:\n";
+  prompt += "- `[[TOOL:web_search|query]]` — Search the web for real-time information. Returns top results with titles, URLs, and snippets.\n";
+  prompt += "- `[[TOOL:web_fetch|url]]` — Fetch and read the text content of a web page.\n\n";
+  prompt += "Use web_search when the user asks about current events, prices, news, weather, or anything that requires up-to-date information.\n";
+  prompt += "Use web_fetch to read the full content of a specific URL from search results.\n\n";
+
+  if (ghAccount) {
+    prompt += `## GitHub (connected as @${ghAccount.account_name})\n\n`;
+    prompt += "Available tools:\n";
+    prompt += "- `[[TOOL:github_list_repos]]` — List all repositories\n";
+    prompt += "- `[[TOOL:github_list_files|owner/repo|path]]` — List files in a directory (path can be empty for root)\n";
+    prompt += "- `[[TOOL:github_read_file|owner/repo|path]]` — Read a file's contents\n";
+    prompt += "- `[[TOOL:github_write_file|owner/repo|path|content|commit message]]` — Create or update a file\n";
+    prompt += "- `[[TOOL:github_delete_file|owner/repo|path|sha|commit message]]` — Delete a file (requires sha from read)\n\n";
+  }
+
+  if (gdAccount) {
+    prompt += `## Google Drive (connected as ${gdAccount.account_name || gdAccount.account_email})\n\n`;
+    prompt += "Available tools:\n";
+    prompt += "- `[[TOOL:drive_list_files]]` — List files in root\n";
+    prompt += "- `[[TOOL:drive_list_folder|folderId]]` — List files in a folder\n";
+    prompt += "- `[[TOOL:drive_read_file|fileId]]` — Read a file's contents\n";
+    prompt += "- `[[TOOL:drive_create_file|filename|content]]` — Create a new file\n";
+    prompt += "- `[[TOOL:drive_update_file|fileId|content]]` — Update an existing file\n";
+    prompt += "- `[[TOOL:drive_delete_file|fileId]]` — Delete a file\n\n";
+  }
+
+  if (vcAccount) {
+    prompt += `## Vercel (connected as @${vcAccount.account_name})\n\n`;
+    prompt += "Available tools:\n";
+    prompt += "- `[[TOOL:vercel_list_projects]]` — List all Vercel projects\n";
+    prompt += "- `[[TOOL:vercel_list_deployments|projectId]]` — List deployments (projectId optional)\n";
+    prompt += "- `[[TOOL:vercel_deploy_status|deploymentId]]` — Check deployment status\n";
+    prompt += "- `[[TOOL:vercel_deploy|projectName|files_json]]` — Deploy files (files_json is a JSON array of {file,data} objects)\n\n";
+  }
+
+  if (ntAccount) {
+    prompt += `## Netlify (connected as ${ntAccount.account_name})\n\n`;
+    prompt += "Available tools:\n";
+    prompt += "- `[[TOOL:netlify_list_sites]]` — List all Netlify sites\n";
+    prompt += "- `[[TOOL:netlify_list_deploys|siteId]]` — List deploys for a site\n";
+    prompt += "- `[[TOOL:netlify_deploy_status|deployId]]` — Check deploy status\n";
+    prompt += "- `[[TOOL:netlify_create_site|name]]` — Create a new site\n";
+    prompt += "- `[[TOOL:netlify_deploy|siteId|files_json]]` — Deploy files (files_json is a JSON array of {path,content} objects)\n\n";
+  }
+
+  if (dockerHost) {
+    prompt += `## Docker (host: ${dockerHost})\n\n`;
+    prompt += "Available tools:\n";
+    prompt += "- `[[TOOL:docker_list_containers]]` — List all containers\n";
+    prompt += "- `[[TOOL:docker_container_logs|containerId|lines]]` — Get container logs (lines defaults to 50)\n";
+    prompt += "- `[[TOOL:docker_start|containerId]]` — Start a container\n";
+    prompt += "- `[[TOOL:docker_stop|containerId]]` — Stop a container\n";
+    prompt += "- `[[TOOL:docker_restart|containerId]]` — Restart a container\n";
+    prompt += "- `[[TOOL:docker_list_images]]` — List Docker images\n\n";
+  }
+
+  // Screen capture — always available on desktop
+  prompt += "## Screen Capture\n\n";
+  prompt += "Available tools:\n";
+  prompt += "- `[[TOOL:screen_capture|filename]]` — Capture a screenshot of the entire screen. Saves to the temp directory and returns the file path. The filename is optional (defaults to screenshot.png).\n";
+  prompt += "- `[[TOOL:screen_capture_window|app_name|filename]]` — Capture a screenshot of a specific application window (macOS only). The filename is optional.\n";
+  prompt += "- `[[TOOL:screen_list_windows]]` — List all visible windows with their app names and titles.\n\n";
+
+  // Screen control — mouse, keyboard, scroll
+  prompt += "## Screen Control (Mouse & Keyboard)\n\n";
+  prompt += "These tools let you interact with the desktop — move the mouse, click, type, press keys, and scroll.\n";
+  prompt += "Always use screen_capture first to see the screen, then use coordinates from the screenshot to interact.\n\n";
+  prompt += "Available tools:\n";
+  prompt += "- `[[TOOL:screen_mouse_move|x|y]]` — Move the mouse cursor to screen coordinates (x, y).\n";
+  prompt += "- `[[TOOL:screen_mouse_click|x|y|button]]` — Click at (x, y). button = left (default), right, or double.\n";
+  prompt += "- `[[TOOL:screen_type|text]]` — Type text at the current cursor position.\n";
+  prompt += "- `[[TOOL:screen_key|key_combo]]` — Press a key combination. Examples: enter, tab, escape, cmd+c, ctrl+v, alt+tab, shift+cmd+3, cmd+a.\n";
+  prompt += "- `[[TOOL:screen_scroll|direction|amount]]` — Scroll. direction = up or down. amount = number of scroll ticks (default 3).\n";
+  prompt += "- `[[TOOL:screen_mouse_position]]` — Get the current mouse cursor position.\n";
+  prompt += "- `[[TOOL:screen_get_size]]` — Get the screen dimensions (width × height).\n\n";
+  prompt += "**Workflow**: 1) Take a screenshot to see the screen. 2) Identify the coordinates of the element to interact with. 3) Move/click on it. 4) Take another screenshot to verify.\n";
+  prompt += "**Safety**: Always confirm with the user before performing potentially destructive actions (e.g., deleting files, submitting forms).\n\n";
+
+  // Terminal execution — always available on desktop
+  const shellName = platform === "win32" ? "PowerShell" : "Terminal (bash/zsh)";
+  prompt += `## ${shellName} Execution\n\n`;
+  prompt += "Available tools:\n";
+  prompt += "- `[[TOOL:shell_exec|command]]` — Execute a shell command and return the output (stdout + stderr). ";
+  if (platform === "win32") {
+    prompt += "Commands run in PowerShell.\n";
+  } else {
+    prompt += "Commands run in the default shell (bash/zsh).\n";
+  }
+  prompt += "- `[[TOOL:shell_exec_bg|command]]` — Execute a command in the background (non-blocking). Returns immediately with the process ID.\n";
+  prompt += "- `[[TOOL:shell_read_file|filepath]]` — Read the contents of a file on the local filesystem.\n";
+  prompt += "- `[[TOOL:shell_write_file|filepath|content]]` — Write content to a file on the local filesystem.\n";
+  prompt += "- `[[TOOL:shell_list_dir|dirpath]]` — List files and directories at the given path.\n\n";
+  prompt += "**Security**: Shell commands are sandboxed to the user's workspace. Do not execute destructive commands without explicit user confirmation.\n\n";
+
+  prompt += "**Important**: Only use one tool at a time. Wait for the result before using another tool.\n";
+  prompt += "When you use a tool, explain to the user what you're doing.\n";
+
+  return prompt;
+}
+
+/**
+ * Detect and execute any tool calls found in the agent's response.
+ * Returns the results and the cleaned response.
+ */
+export async function executeToolCalls(
+  db: Database.Database,
+  userId: string,
+  response: string
+): Promise<{ results: ToolResult[]; hasTools: boolean }> {
+  const matches = [...response.matchAll(TOOL_PATTERN)];
+  if (matches.length === 0) return { results: [], hasTools: false };
+
+  const results: ToolResult[] = [];
+
+  for (const match of matches) {
+    const action = match[1]!;
+    // Strip surrounding quotes that LLMs sometimes add around params (e.g. "open -a Brave")
+    const stripQuotes = (s: string) => s.replace(/^(["'])(.*)\1$/, "$2");
+    const params = match[2] ? match[2].split("|").map((p) => stripQuotes(p.trim())) : [];
+
+    try {
+      const result = await executeTool(db, userId, action, params);
+      results.push({ tool: action, success: true, result });
+    } catch (err: any) {
+      results.push({ tool: action, success: false, result: `Error: ${err.message}` });
+    }
+  }
+
+  return { results, hasTools: true };
+}
+
+async function executeTool(
+  db: Database.Database,
+  userId: string,
+  action: string,
+  params: string[]
+): Promise<string> {
+  const env = getEnv();
+
+  // GitHub tools
+  if (action.startsWith("github_")) {
+    const account = getConnectedAccount(db, userId, "github");
+    if (!account) return "GitHub is not connected. Please connect GitHub in the Integrations tab.";
+    const token = account.access_token;
+
+    switch (action) {
+      case "github_list_repos": {
+        const repos = await github.listRepos(token);
+        const list = repos.slice(0, 30).map((r) => `- ${r.full_name}${r.private ? " (private)" : ""}: ${r.description || "No description"}`);
+        return `Found ${repos.length} repositories:\n${list.join("\n")}`;
+      }
+      case "github_list_files": {
+        const [repoFull, filePath = ""] = params;
+        if (!repoFull) return "Error: repository is required (e.g., owner/repo)";
+        const [owner, repo] = repoFull.split("/");
+        if (!owner || !repo) return "Error: invalid repo format. Use owner/repo";
+        const files = await github.listFiles(token, owner, repo, filePath);
+        const list = files.map((f) => `- ${f.type === "dir" ? "📁" : "📄"} ${f.name}${f.size ? ` (${f.size} bytes)` : ""}`);
+        return `Files in ${repoFull}/${filePath || "(root)"}:\n${list.join("\n")}`;
+      }
+      case "github_read_file": {
+        const [repoFull2, filePath2] = params;
+        if (!repoFull2 || !filePath2) return "Error: repository and path are required";
+        const [owner2, repo2] = repoFull2.split("/");
+        if (!owner2 || !repo2) return "Error: invalid repo format. Use owner/repo";
+        const file = await github.readFile(token, owner2, repo2, filePath2);
+        return `File: ${filePath2} (sha: ${file.sha})\n\`\`\`\n${file.content}\n\`\`\``;
+      }
+      case "github_write_file": {
+        const [repoFull3, filePath3, content, message] = params;
+        if (!repoFull3 || !filePath3 || content === undefined) return "Error: repository, path, and content are required";
+        const [owner3, repo3] = repoFull3.split("/");
+        if (!owner3 || !repo3) return "Error: invalid repo format. Use owner/repo";
+        // Try to get existing sha for update
+        let sha: string | undefined;
+        try {
+          const existing = await github.readFile(token, owner3, repo3, filePath3);
+          sha = existing.sha;
+        } catch { /* new file */ }
+        const result = await github.createOrUpdateFile(
+          token, owner3, repo3, filePath3, content,
+          message || `${sha ? "Update" : "Create"} ${filePath3} via Claw Staffer agent`,
+          sha
+        );
+        return `File ${sha ? "updated" : "created"}: ${filePath3} (sha: ${result.sha})`;
+      }
+      case "github_delete_file": {
+        const [repoFull4, filePath4, sha4, message4] = params;
+        if (!repoFull4 || !filePath4 || !sha4) return "Error: repository, path, and sha are required";
+        const [owner4, repo4] = repoFull4.split("/");
+        if (!owner4 || !repo4) return "Error: invalid repo format. Use owner/repo";
+        await github.deleteFile(token, owner4, repo4, filePath4, sha4, message4 || `Delete ${filePath4} via Claw Staffer agent`);
+        return `File deleted: ${filePath4}`;
+      }
+      default:
+        return `Unknown GitHub tool: ${action}`;
+    }
+  }
+
+  // Google Drive tools
+  if (action.startsWith("drive_")) {
+    const account = getConnectedAccount(db, userId, "google_drive");
+    if (!account) return "Google Drive is not connected. Please connect Google Drive in the Integrations tab.";
+
+    // Refresh token if needed
+    let token = account.access_token;
+    if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
+      if (!account.refresh_token || !env.GOOGLE_DRIVE_CLIENT_ID || !env.GOOGLE_DRIVE_CLIENT_SECRET) {
+        return "Google Drive token expired. Please reconnect in the Integrations tab.";
+      }
+      const refreshed = await gdrive.refreshAccessToken(env.GOOGLE_DRIVE_CLIENT_ID, env.GOOGLE_DRIVE_CLIENT_SECRET, account.refresh_token);
+      const expiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
+      updateAccessToken(db, account.id, refreshed.access_token, expiresAt);
+      token = refreshed.access_token;
+    }
+
+    switch (action) {
+      case "drive_list_files": {
+        const files = await gdrive.listFiles(token);
+        const list = files.slice(0, 30).map((f) =>
+          `- ${f.mimeType === "application/vnd.google-apps.folder" ? "📁" : "📄"} ${f.name} (id: ${f.id})`
+        );
+        return `Drive files:\n${list.join("\n")}`;
+      }
+      case "drive_list_folder": {
+        const [folderId] = params;
+        if (!folderId) return "Error: folderId is required";
+        const files = await gdrive.listFiles(token, folderId);
+        const list = files.slice(0, 30).map((f) =>
+          `- ${f.mimeType === "application/vnd.google-apps.folder" ? "📁" : "📄"} ${f.name} (id: ${f.id})`
+        );
+        return `Folder contents:\n${list.join("\n")}`;
+      }
+      case "drive_read_file": {
+        const [fileId] = params;
+        if (!fileId) return "Error: fileId is required";
+        const file = await gdrive.readFile(token, fileId);
+        return `File: ${file.name} (${file.mimeType})\n\`\`\`\n${file.content}\n\`\`\``;
+      }
+      case "drive_create_file": {
+        const [fileName, content = ""] = params;
+        if (!fileName) return "Error: filename is required";
+        const file = await gdrive.createFile(token, fileName, content);
+        return `File created: ${file.name} (id: ${file.id})`;
+      }
+      case "drive_update_file": {
+        const [fileId2, content2] = params;
+        if (!fileId2 || content2 === undefined) return "Error: fileId and content are required";
+        const file = await gdrive.updateFile(token, fileId2, content2);
+        return `File updated: ${file.name} (id: ${file.id})`;
+      }
+      case "drive_delete_file": {
+        const [fileId3] = params;
+        if (!fileId3) return "Error: fileId is required";
+        await gdrive.deleteFile(token, fileId3);
+        return "File deleted successfully.";
+      }
+      default:
+        return `Unknown Drive tool: ${action}`;
+    }
+  }
+
+  // Vercel tools
+  if (action.startsWith("vercel_")) {
+    const account = getConnectedAccount(db, userId, "vercel");
+    if (!account) return "Vercel is not connected. Please connect Vercel in the Integrations tab.";
+    const token = account.access_token;
+
+    switch (action) {
+      case "vercel_list_projects": {
+        const projects = await vercelApi.listProjects(token);
+        const list = projects.slice(0, 30).map((p) => `- ${p.name} (framework: ${p.framework || "none"})`);
+        return `Found ${projects.length} Vercel projects:\n${list.join("\n")}`;
+      }
+      case "vercel_list_deployments": {
+        const [projectId] = params;
+        const deployments = await vercelApi.listDeployments(token, projectId || undefined);
+        const list = deployments.slice(0, 20).map((d) =>
+          `- ${d.url} — ${d.state || d.readyState} (${new Date(d.created).toLocaleString()})`
+        );
+        return `Deployments:\n${list.join("\n")}`;
+      }
+      case "vercel_deploy_status": {
+        const [deploymentId] = params;
+        if (!deploymentId) return "Error: deploymentId is required";
+        const d = await vercelApi.getDeployment(token, deploymentId);
+        return `Deployment ${d.uid}: state=${d.state || d.readyState}, url=${d.url}`;
+      }
+      case "vercel_deploy": {
+        const [name, filesJson] = params;
+        if (!name || !filesJson) return "Error: projectName and files_json are required";
+        let files: Array<{ file: string; data: string }>;
+        try { files = JSON.parse(filesJson); } catch { return "Error: files_json must be valid JSON"; }
+        const d = await vercelApi.createDeployment(token, name, files);
+        return `Deployed! URL: ${d.url} (uid: ${d.uid}, state: ${d.state || d.readyState})`;
+      }
+      default:
+        return `Unknown Vercel tool: ${action}`;
+    }
+  }
+
+  // Netlify tools
+  if (action.startsWith("netlify_")) {
+    const account = getConnectedAccount(db, userId, "netlify");
+    if (!account) return "Netlify is not connected. Please connect Netlify in the Integrations tab.";
+    const token = account.access_token;
+
+    switch (action) {
+      case "netlify_list_sites": {
+        const sites = await netlifyApi.listSites(token);
+        const list = sites.slice(0, 30).map((s) => `- ${s.name}: ${s.ssl_url || s.url} (id: ${s.id})`);
+        return `Found ${sites.length} Netlify sites:\n${list.join("\n")}`;
+      }
+      case "netlify_list_deploys": {
+        const [siteId] = params;
+        if (!siteId) return "Error: siteId is required";
+        const deploys = await netlifyApi.listDeploys(token, siteId);
+        const list = deploys.slice(0, 20).map((d) =>
+          `- ${d.id}: ${d.state} — ${d.ssl_url || d.url} (${d.created_at})`
+        );
+        return `Deploys:\n${list.join("\n")}`;
+      }
+      case "netlify_deploy_status": {
+        const [deployId] = params;
+        if (!deployId) return "Error: deployId is required";
+        const d = await netlifyApi.getDeployStatus(token, deployId);
+        return `Deploy ${d.id}: state=${d.state}, url=${d.ssl_url || d.url}`;
+      }
+      case "netlify_create_site": {
+        const [name] = params;
+        const site = await netlifyApi.createSite(token, name || undefined);
+        return `Site created: ${site.name} — ${site.ssl_url || site.url} (id: ${site.id})`;
+      }
+      case "netlify_deploy": {
+        const [siteId, filesJson] = params;
+        if (!siteId || !filesJson) return "Error: siteId and files_json are required";
+        let files: Array<{ path: string; content: string }>;
+        try { files = JSON.parse(filesJson); } catch { return "Error: files_json must be valid JSON"; }
+        const d = await netlifyApi.deployFiles(token, siteId, files, "Deploy via Claw Staffer agent");
+        return `Deployed! URL: ${d.ssl_url || d.url} (id: ${d.id}, state: ${d.state})`;
+      }
+      default:
+        return `Unknown Netlify tool: ${action}`;
+    }
+  }
+
+  // Docker tools
+  if (action.startsWith("docker_")) {
+    const env = getEnv();
+    const host = resolveIntegrationCred(db, "docker_host", env.DOCKER_HOST) || "http://localhost:2375";
+
+    switch (action) {
+      case "docker_list_containers": {
+        const containers = await dockerApi.listContainers(host);
+        const list = containers.map((c) => {
+          const name = c.Names?.[0]?.replace(/^\//, "") || c.Id.slice(0, 12);
+          return `- ${name} (${c.Image}) — ${c.State}: ${c.Status}`;
+        });
+        return `Docker containers:\n${list.join("\n") || "No containers found"}`;
+      }
+      case "docker_container_logs": {
+        const [containerId, lines] = params;
+        if (!containerId) return "Error: containerId is required";
+        const tail = parseInt(lines || "50", 10);
+        const logs = await dockerApi.getContainerLogs(host, containerId, tail);
+        return `Logs for ${containerId} (last ${tail} lines):\n\`\`\`\n${logs.slice(0, 4000)}\n\`\`\``;
+      }
+      case "docker_start": {
+        const [containerId] = params;
+        if (!containerId) return "Error: containerId is required";
+        await dockerApi.startContainer(host, containerId);
+        return `Container ${containerId} started.`;
+      }
+      case "docker_stop": {
+        const [containerId] = params;
+        if (!containerId) return "Error: containerId is required";
+        await dockerApi.stopContainer(host, containerId);
+        return `Container ${containerId} stopped.`;
+      }
+      case "docker_restart": {
+        const [containerId] = params;
+        if (!containerId) return "Error: containerId is required";
+        await dockerApi.restartContainer(host, containerId);
+        return `Container ${containerId} restarted.`;
+      }
+      case "docker_list_images": {
+        const images = await dockerApi.listImages(host);
+        const list = images.map((i) => {
+          const tags = i.RepoTags?.join(", ") || "<none>";
+          const sizeMB = (i.Size / 1048576).toFixed(1);
+          return `- ${tags} (${sizeMB} MB)`;
+        });
+        return `Docker images:\n${list.join("\n") || "No images found"}`;
+      }
+      default:
+        return `Unknown Docker tool: ${action}`;
+    }
+  }
+
+  // Screen capture tools — always available on desktop
+  if (action.startsWith("screen_")) {
+    const platform = os.platform();
+    const tmpDir = os.tmpdir();
+
+    switch (action) {
+      case "screen_capture": {
+        const filename = params[0] || `screenshot-${Date.now()}.png`;
+        const outPath = path.join(tmpDir, filename);
+
+        if (platform === "darwin") {
+          await execAsync(`screencapture -x "${outPath}"`);
+        } else if (platform === "win32") {
+          await execAsync(
+            `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; ` +
+            `$screen = [System.Windows.Forms.Screen]::PrimaryScreen; ` +
+            `$bitmap = New-Object System.Drawing.Bitmap($screen.Bounds.Width, $screen.Bounds.Height); ` +
+            `$graphics = [System.Drawing.Graphics]::FromImage($bitmap); ` +
+            `$graphics.CopyFromScreen($screen.Bounds.Location, [System.Drawing.Point]::Empty, $screen.Bounds.Size); ` +
+            `$bitmap.Save('${outPath.replace(/'/g, "''")}'); ` +
+            `$graphics.Dispose(); $bitmap.Dispose()"`
+          );
+        } else {
+          // Linux: try scrot, gnome-screenshot, or import (ImageMagick)
+          try {
+            await execAsync(`scrot "${outPath}" 2>/dev/null || gnome-screenshot -f "${outPath}" 2>/dev/null || import -window root "${outPath}"`);
+          } catch {
+            return "Screen capture failed. Install one of: scrot, gnome-screenshot, or ImageMagick (`sudo apt install -y scrot`).";
+          }
+        }
+
+        if (fs.existsSync(outPath)) {
+          const stats = fs.statSync(outPath);
+          return `Screenshot captured: ${outPath} (${(stats.size / 1024).toFixed(1)} KB)`;
+        }
+        return "Screenshot capture failed — file was not created.";
+      }
+      case "screen_capture_window": {
+        const appName = params[0];
+        const filename = params[1] || `window-${Date.now()}.png`;
+        const outPath = path.join(tmpDir, filename);
+
+        if (!appName) return "Error: app_name is required";
+
+        if (platform === "darwin") {
+          // Use screencapture with window selection by app name
+          const script = `
+            tell application "System Events"
+              set frontApp to name of first application process whose frontmost is true
+            end tell
+            tell application "${appName.replace(/"/g, '\\"')}" to activate
+            delay 0.5
+          `;
+          try {
+            await execAsync(`osascript -e '${script.replace(/'/g, "'\\''")}'`);
+            await execAsync(`screencapture -x -l $(osascript -e 'tell application "System Events" to id of first window of application process "${appName.replace(/"/g, '\\"')}"') "${outPath}" 2>/dev/null || screencapture -x "${outPath}"`);
+          } catch {
+            // Fallback to full screen capture
+            await execAsync(`screencapture -x "${outPath}"`);
+          }
+        } else {
+          // Linux: use xdotool to find window + scrot to capture it
+          try {
+            const escaped = appName.replace(/"/g, '\\"');
+            await execAsync(`xdotool search --name "${escaped}" windowactivate --sync 2>/dev/null || wmctrl -a "${escaped}" 2>/dev/null`);
+            await new Promise((r) => setTimeout(r, 500));
+            await execAsync(`scrot -u "${outPath}" 2>/dev/null || import -window "$(xdotool getactivewindow)" "${outPath}"`);
+          } catch {
+            // Fallback to full screen capture
+            try {
+              await execAsync(`scrot "${outPath}" 2>/dev/null || import -window root "${outPath}"`);
+            } catch {
+              return "Window capture failed. Install xdotool and scrot: `sudo apt install -y xdotool scrot`";
+            }
+          }
+        }
+
+        if (fs.existsSync(outPath)) {
+          const stats = fs.statSync(outPath);
+          return `Window screenshot captured for "${appName}": ${outPath} (${(stats.size / 1024).toFixed(1)} KB)`;
+        }
+        return "Window screenshot capture failed.";
+      }
+      case "screen_list_windows": {
+        if (platform === "darwin") {
+          try {
+            const { stdout } = await execAsync(
+              `osascript -e 'tell application "System Events" to get {name, title} of every window of every application process whose visible is true' 2>/dev/null || echo "[]"`
+            );
+            // More reliable approach using CGWindowListCopyWindowInfo
+            const { stdout: windowList } = await execAsync(
+              `python3 -c "
+import Quartz, json
+windows = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID)
+result = []
+for w in windows:
+    owner = w.get('kCGWindowOwnerName', '')
+    name = w.get('kCGWindowName', '')
+    if owner and name:
+        result.append(f'{owner}: {name}')
+print('\\n'.join(result[:30]))
+" 2>/dev/null || echo "Could not list windows"`
+            );
+            return `Visible windows:\n${windowList.trim() || "No windows found"}`;
+          } catch {
+            return "Could not list windows. Ensure accessibility permissions are granted.";
+          }
+        } else if (platform === "win32") {
+          try {
+            const { stdout } = await execAsync(
+              `powershell -Command "Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | Select-Object -First 30 ProcessName, MainWindowTitle | Format-Table -AutoSize | Out-String"`
+            );
+            return `Visible windows:\n${stdout.trim()}`;
+          } catch {
+            return "Could not list windows.";
+          }
+        }
+        // Linux
+        try {
+          const { stdout } = await execAsync(
+            `wmctrl -l 2>/dev/null || xdotool search --onlyvisible --name "" getwindowname 2>/dev/null | head -30 || echo "Install wmctrl: sudo apt install -y wmctrl"`
+          );
+          return `Visible windows:\n${stdout.trim() || "No windows found (install wmctrl: sudo apt install -y wmctrl)"}`;
+        } catch {
+          return "Could not list windows. Install wmctrl: `sudo apt install -y wmctrl`";
+        }
+      }
+
+      // --- Screen Control tools (mouse, keyboard, scroll) ---
+
+      case "screen_mouse_move": {
+        const x = parseInt(params[0], 10);
+        const y = parseInt(params[1], 10);
+        if (isNaN(x) || isNaN(y)) return "Error: x and y coordinates are required (numbers)";
+
+        try {
+          if (platform === "darwin") {
+            await execAsync(`python3 -c "
+import Quartz
+point = Quartz.CGPointMake(${x}, ${y})
+event = Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, point, Quartz.kCGMouseButtonLeft)
+Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+"`);
+          } else if (platform === "win32") {
+            await execAsync(
+              `powershell -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Mouse { [DllImport(\\"user32.dll\\")] public static extern bool SetCursorPos(int X, int Y); }'; [Mouse]::SetCursorPos(${x}, ${y})"`
+            );
+          } else {
+            // Linux: xdotool
+            await execAsync(`xdotool mousemove ${x} ${y}`);
+          }
+          return `Mouse moved to (${x}, ${y})`;
+        } catch (err: any) {
+          return `Error moving mouse: ${err.message}. Ensure accessibility permissions are granted.`;
+        }
+      }
+
+      case "screen_mouse_click": {
+        const x = parseInt(params[0], 10);
+        const y = parseInt(params[1], 10);
+        const button = (params[2] || "left").toLowerCase();
+        if (isNaN(x) || isNaN(y)) return "Error: x and y coordinates are required (numbers)";
+
+        try {
+          if (platform === "darwin") {
+            let downType: string, upType: string, btnConst: string;
+            if (button === "right") {
+              downType = "Quartz.kCGEventRightMouseDown";
+              upType = "Quartz.kCGEventRightMouseUp";
+              btnConst = "Quartz.kCGMouseButtonRight";
+            } else {
+              downType = "Quartz.kCGEventLeftMouseDown";
+              upType = "Quartz.kCGEventLeftMouseUp";
+              btnConst = "Quartz.kCGMouseButtonLeft";
+            }
+            const clickCount = button === "double" ? 2 : 1;
+            await execAsync(`python3 -c "
+import Quartz, time
+point = Quartz.CGPointMake(${x}, ${y})
+# Move first
+move = Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, point, Quartz.kCGMouseButtonLeft)
+Quartz.CGEventPost(Quartz.kCGHIDEventTap, move)
+time.sleep(0.05)
+for i in range(${clickCount}):
+    down = Quartz.CGEventCreateMouseEvent(None, ${downType}, point, ${btnConst})
+    Quartz.CGEventSetIntegerValueField(down, Quartz.kCGMouseEventClickState, i + 1)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, down)
+    time.sleep(0.02)
+    up = Quartz.CGEventCreateMouseEvent(None, ${upType}, point, ${btnConst})
+    Quartz.CGEventSetIntegerValueField(up, Quartz.kCGMouseEventClickState, i + 1)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, up)
+    time.sleep(0.02)
+"`);
+          } else if (platform === "win32") {
+            let flags: string;
+            if (button === "right") {
+              flags = "0x0008, 0, 0, 0, UIntPtr.Zero); Mouse.mouse_event(0x0010";
+            } else if (button === "double") {
+              flags = "0x0002, 0, 0, 0, UIntPtr.Zero); Mouse.mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero); System.Threading.Thread.Sleep(50); Mouse.mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero); Mouse.mouse_event(0x0004";
+            } else {
+              flags = "0x0002, 0, 0, 0, UIntPtr.Zero); Mouse.mouse_event(0x0004";
+            }
+            await execAsync(
+              `powershell -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Mouse { [DllImport(\\"user32.dll\\")] public static extern bool SetCursorPos(int X, int Y); [DllImport(\\"user32.dll\\")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo); }'; [Mouse]::SetCursorPos(${x}, ${y}); [Mouse]::mouse_event(${flags}, 0, 0, UIntPtr.Zero)"`
+            );
+          } else {
+            // Linux: xdotool
+            let xdoBtn = "1"; // left
+            if (button === "right") xdoBtn = "3";
+            else if (button === "middle") xdoBtn = "2";
+            const repeat = button === "double" ? "--repeat 2 --delay 50" : "";
+            await execAsync(`xdotool mousemove ${x} ${y} && xdotool click ${repeat} ${xdoBtn}`);
+          }
+          return `Mouse ${button} clicked at (${x}, ${y})`;
+        } catch (err: any) {
+          return `Error clicking: ${err.message}. Ensure accessibility permissions are granted.`;
+        }
+      }
+
+      case "screen_type": {
+        const text = params[0];
+        if (!text) return "Error: text is required";
+
+        try {
+          if (platform === "darwin") {
+            // Use AppleScript keystroke for typing text
+            const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+            await execAsync(`osascript -e 'tell application "System Events" to keystroke "${escaped}"'`);
+          } else if (platform === "win32") {
+            const escaped = text.replace(/'/g, "''").replace(/`/g, "``");
+            await execAsync(
+              `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')"`
+            );
+          } else {
+            // Linux: xdotool type
+            const escaped = text.replace(/'/g, "'\\''");
+            await execAsync(`xdotool type --clearmodifiers '${escaped}'`);
+          }
+          return `Typed: "${text.length > 60 ? text.slice(0, 60) + "..." : text}"`;
+        } catch (err: any) {
+          return `Error typing: ${err.message}. Ensure accessibility permissions are granted.`;
+        }
+      }
+
+      case "screen_key": {
+        const combo = params[0];
+        if (!combo) return "Error: key_combo is required (e.g., enter, cmd+c, ctrl+v)";
+
+        try {
+          if (platform === "darwin") {
+            // Map key combos to AppleScript
+            const parts = combo.toLowerCase().split("+").map((k: string) => k.trim());
+            const modifiers: string[] = [];
+            let key = "";
+            for (const p of parts) {
+              if (["cmd", "command"].includes(p)) modifiers.push("command down");
+              else if (["ctrl", "control"].includes(p)) modifiers.push("control down");
+              else if (["alt", "option"].includes(p)) modifiers.push("option down");
+              else if (["shift"].includes(p)) modifiers.push("shift down");
+              else key = p;
+            }
+            // Map special key names to key codes
+            const keyCodeMap: Record<string, number> = {
+              "return": 36, "enter": 36, "tab": 48, "escape": 53, "esc": 53,
+              "space": 49, "delete": 51, "backspace": 51, "forwarddelete": 117,
+              "up": 126, "down": 125, "left": 123, "right": 124,
+              "home": 115, "end": 119, "pageup": 116, "pagedown": 121,
+              "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97,
+              "f7": 98, "f8": 100, "f9": 101, "f10": 109, "f11": 103, "f12": 111,
+            };
+            const modStr = modifiers.length > 0 ? ` using {${modifiers.join(", ")}}` : "";
+
+            if (keyCodeMap[key] !== undefined) {
+              await execAsync(`osascript -e 'tell application "System Events" to key code ${keyCodeMap[key]}${modStr}'`);
+            } else if (key.length === 1) {
+              await execAsync(`osascript -e 'tell application "System Events" to keystroke "${key}"${modStr}'`);
+            } else {
+              return `Error: Unknown key "${key}". Use key names like: enter, tab, escape, space, delete, up, down, left, right, f1-f12, or single characters.`;
+            }
+          } else if (platform === "win32") {
+            // Map to SendKeys format
+            const parts = combo.toLowerCase().split("+").map((k: string) => k.trim());
+            let sendKey = "";
+            for (const p of parts) {
+              if (["ctrl", "control"].includes(p)) sendKey += "^";
+              else if (["alt"].includes(p)) sendKey += "%";
+              else if (["shift"].includes(p)) sendKey += "+";
+              else if (["enter", "return"].includes(p)) sendKey += "{ENTER}";
+              else if (["tab"].includes(p)) sendKey += "{TAB}";
+              else if (["escape", "esc"].includes(p)) sendKey += "{ESC}";
+              else if (["space"].includes(p)) sendKey += " ";
+              else if (["delete", "backspace"].includes(p)) sendKey += "{BACKSPACE}";
+              else if (["up"].includes(p)) sendKey += "{UP}";
+              else if (["down"].includes(p)) sendKey += "{DOWN}";
+              else if (["left"].includes(p)) sendKey += "{LEFT}";
+              else if (["right"].includes(p)) sendKey += "{RIGHT}";
+              else if (["home"].includes(p)) sendKey += "{HOME}";
+              else if (["end"].includes(p)) sendKey += "{END}";
+              else if (["pageup"].includes(p)) sendKey += "{PGUP}";
+              else if (["pagedown"].includes(p)) sendKey += "{PGDN}";
+              else if (p.match(/^f\d+$/)) sendKey += `{${p.toUpperCase()}}`;
+              else sendKey += p;
+            }
+            const escaped = sendKey.replace(/'/g, "''");
+            await execAsync(
+              `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')"`
+            );
+          } else {
+            // Linux: xdotool key
+            const parts = combo.toLowerCase().split("+").map((k: string) => k.trim());
+            const xdoKeys: string[] = [];
+            for (const p of parts) {
+              if (["cmd", "command", "super"].includes(p)) xdoKeys.push("super");
+              else if (["ctrl", "control"].includes(p)) xdoKeys.push("ctrl");
+              else if (["alt", "option"].includes(p)) xdoKeys.push("alt");
+              else if (["shift"].includes(p)) xdoKeys.push("shift");
+              else if (["enter", "return"].includes(p)) xdoKeys.push("Return");
+              else if (["tab"].includes(p)) xdoKeys.push("Tab");
+              else if (["escape", "esc"].includes(p)) xdoKeys.push("Escape");
+              else if (["space"].includes(p)) xdoKeys.push("space");
+              else if (["delete", "backspace"].includes(p)) xdoKeys.push("BackSpace");
+              else if (["up"].includes(p)) xdoKeys.push("Up");
+              else if (["down"].includes(p)) xdoKeys.push("Down");
+              else if (["left"].includes(p)) xdoKeys.push("Left");
+              else if (["right"].includes(p)) xdoKeys.push("Right");
+              else if (["home"].includes(p)) xdoKeys.push("Home");
+              else if (["end"].includes(p)) xdoKeys.push("End");
+              else if (["pageup"].includes(p)) xdoKeys.push("Prior");
+              else if (["pagedown"].includes(p)) xdoKeys.push("Next");
+              else if (p.match(/^f\d+$/)) xdoKeys.push(p.toUpperCase());
+              else xdoKeys.push(p);
+            }
+            await execAsync(`xdotool key --clearmodifiers ${xdoKeys.join("+")}`);
+          }
+          return `Key pressed: ${combo}`;
+        } catch (err: any) {
+          return `Error pressing key: ${err.message}. Ensure accessibility permissions are granted.`;
+        }
+      }
+
+      case "screen_scroll": {
+        const direction = (params[0] || "down").toLowerCase();
+        const amount = parseInt(params[1] || "3", 10);
+        const scrollUp = direction === "up";
+
+        try {
+          if (platform === "darwin") {
+            const scrollVal = scrollUp ? amount : -amount;
+            await execAsync(`python3 -c "
+import Quartz
+event = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitLine, 1, ${scrollVal})
+Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+"`);
+          } else if (platform === "win32") {
+            const scrollVal = scrollUp ? amount * 120 : -(amount * 120);
+            await execAsync(
+              `powershell -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Mouse { [DllImport(\\"user32.dll\\")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo); }'; [Mouse]::mouse_event(0x0800, 0, 0, ${scrollVal}, [UIntPtr]::Zero)"`
+            );
+          } else {
+            // Linux: xdotool
+            const xdoBtn = scrollUp ? "4" : "5"; // X11 button 4=up, 5=down
+            await execAsync(`xdotool click --repeat ${amount} --delay 50 ${xdoBtn}`);
+          }
+          return `Scrolled ${direction} by ${amount} ticks`;
+        } catch (err: any) {
+          return `Error scrolling: ${err.message}`;
+        }
+      }
+
+      case "screen_mouse_position": {
+        try {
+          if (platform === "darwin") {
+            const { stdout } = await execAsync(`python3 -c "
+import Quartz
+loc = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
+print(f'{int(loc.x)},{int(loc.y)}')
+"`);
+            const [mx, my] = stdout.trim().split(",");
+            return `Mouse position: (${mx}, ${my})`;
+          } else if (platform === "win32") {
+            const { stdout } = await execAsync(
+              `powershell -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Cursor { [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; } [DllImport(\\"user32.dll\\")] public static extern bool GetCursorPos(out POINT lpPoint); }'; $p = New-Object Cursor+POINT; [Cursor]::GetCursorPos([ref]$p) | Out-Null; Write-Output \\\"$($p.X),$($p.Y)\\\""`
+            );
+            const [mx, my] = stdout.trim().split(",");
+            return `Mouse position: (${mx}, ${my})`;
+          }
+          // Linux: xdotool
+          const { stdout: linuxPos } = await execAsync(`xdotool getmouselocation --shell`);
+          const xMatch = linuxPos.match(/X=(\d+)/);
+          const yMatch = linuxPos.match(/Y=(\d+)/);
+          return `Mouse position: (${xMatch?.[1] ?? "?"}, ${yMatch?.[1] ?? "?"})`;
+        } catch (err: any) {
+          return `Error getting mouse position: ${err.message}`;
+        }
+      }
+
+      case "screen_get_size": {
+        try {
+          if (platform === "darwin") {
+            const { stdout } = await execAsync(`python3 -c "
+import Quartz
+d = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
+print(f'{int(d.size.width)},{int(d.size.height)}')
+"`);
+            const [w, h] = stdout.trim().split(",");
+            return `Screen size: ${w} × ${h} pixels`;
+          } else if (platform === "win32") {
+            const { stdout } = await execAsync(
+              `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; $s = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; Write-Output \\\"$($s.Width),$($s.Height)\\\""`
+            );
+            const [w, h] = stdout.trim().split(",");
+            return `Screen size: ${w} × ${h} pixels`;
+          }
+          // Linux: xdpyinfo or xrandr
+          const { stdout: linuxSize } = await execAsync(`xdpyinfo 2>/dev/null | grep dimensions | awk '{print $2}' || xrandr 2>/dev/null | grep '\*' | awk '{print $1}' | head -1`);
+          const dims = linuxSize.trim().split("x");
+          if (dims.length === 2) {
+            return `Screen size: ${dims[0]} × ${dims[1]} pixels`;
+          }
+          return `Screen info: ${linuxSize.trim()}`;
+        } catch (err: any) {
+          return `Error getting screen size: ${err.message}`;
+        }
+      }
+
+      default:
+        return `Unknown screen tool: ${action}`;
+    }
+  }
+
+  // Shell / Terminal execution tools — always available on desktop
+  if (action.startsWith("shell_")) {
+    const platform = os.platform();
+    const TIMEOUT_MS = 30000; // 30 second timeout for commands
+    const MAX_OUTPUT = 8000; // Max characters of output to return
+
+    switch (action) {
+      case "shell_exec": {
+        const command = params[0];
+        if (!command) return "Error: command is required";
+
+        // Security: block obviously destructive patterns
+        const dangerous = [
+          /\brm\s+-rf\s+[\/~]/i,
+          /\bformat\b.*\/[a-z]/i,
+          /\bmkfs\b/i,
+          /\bdd\s+if=/i,
+          />\s*\/dev\/sd/i,
+        ];
+        for (const pattern of dangerous) {
+          if (pattern.test(command)) {
+            return "Error: This command has been blocked for safety. Destructive filesystem commands require explicit user confirmation.";
+          }
+        }
+
+        try {
+          const shell = platform === "win32" ? "powershell.exe" : "/bin/bash";
+          const shellArgs = platform === "win32"
+            ? ["-NoProfile", "-Command", command]
+            : ["-c", command];
+
+          const { stdout, stderr } = await execAsync(command, {
+            timeout: TIMEOUT_MS,
+            maxBuffer: 1024 * 1024,
+            shell: shell,
+            env: { ...process.env, TERM: "dumb" },
+          });
+
+          let output = stdout || "";
+          if (stderr) output += (output ? "\n\n" : "") + `STDERR:\n${stderr}`;
+
+          if (output.length > MAX_OUTPUT) {
+            output = output.slice(0, MAX_OUTPUT) + `\n\n... (output truncated, ${output.length} total chars)`;
+          }
+          return output || "(command completed with no output)";
+        } catch (err: any) {
+          const output = (err.stdout || "") + (err.stderr ? `\nSTDERR: ${err.stderr}` : "");
+          return `Command failed (exit code ${err.code ?? "unknown"}):\n${output.slice(0, MAX_OUTPUT) || err.message}`;
+        }
+      }
+      case "shell_exec_bg": {
+        const command = params[0];
+        if (!command) return "Error: command is required";
+
+        try {
+          const shell = platform === "win32" ? "powershell.exe" : "/bin/bash";
+          const child = exec(command, { shell, env: { ...process.env, TERM: "dumb" } });
+          const pid = child.pid;
+          child.unref();
+          return `Background process started with PID: ${pid}`;
+        } catch (err: any) {
+          return `Failed to start background process: ${err.message}`;
+        }
+      }
+      case "shell_read_file": {
+        const filepath = params[0];
+        if (!filepath) return "Error: filepath is required";
+
+        try {
+          const resolved = path.resolve(filepath);
+          const stats = fs.statSync(resolved);
+          if (stats.size > 512 * 1024) {
+            return `Error: File is too large (${(stats.size / 1024).toFixed(1)} KB). Max 512 KB.`;
+          }
+          const content = fs.readFileSync(resolved, "utf-8");
+          return `File: ${resolved} (${stats.size} bytes)\n\`\`\`\n${content.slice(0, MAX_OUTPUT)}\n\`\`\``;
+        } catch (err: any) {
+          return `Error reading file: ${err.message}`;
+        }
+      }
+      case "shell_write_file": {
+        const filepath = params[0];
+        const content = params.slice(1).join("|"); // rejoin in case content contains |
+        if (!filepath) return "Error: filepath is required";
+
+        try {
+          const resolved = path.resolve(filepath);
+          const dir = path.dirname(resolved);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          fs.writeFileSync(resolved, content, "utf-8");
+          return `File written: ${resolved} (${Buffer.byteLength(content, "utf-8")} bytes)`;
+        } catch (err: any) {
+          return `Error writing file: ${err.message}`;
+        }
+      }
+      case "shell_list_dir": {
+        const dirpath = params[0] || ".";
+        try {
+          const resolved = path.resolve(dirpath);
+          const entries = fs.readdirSync(resolved, { withFileTypes: true });
+          const list = entries.slice(0, 100).map((e) => {
+            const icon = e.isDirectory() ? "📁" : "📄";
+            let size = "";
+            if (!e.isDirectory()) {
+              try {
+                const s = fs.statSync(path.join(resolved, e.name));
+                size = ` (${(s.size / 1024).toFixed(1)} KB)`;
+              } catch { /* ignore */ }
+            }
+            return `${icon} ${e.name}${size}`;
+          });
+          return `Contents of ${resolved}:\n${list.join("\n") || "(empty directory)"}`;
+        } catch (err: any) {
+          return `Error listing directory: ${err.message}`;
+        }
+      }
+      default:
+        return `Unknown shell tool: ${action}`;
+    }
+  }
+
+  // Web tools — always available, no account needed
+  if (action === "web_search") {
+    const query = params[0];
+    if (!query) return "Error: search query is required";
+    try {
+      const results = await webSearch(query);
+      if (results.length === 0) return `No results found for: ${query}`;
+      const list = results.map((r, i) =>
+        `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.snippet}`
+      );
+      return `Web search results for "${query}":\n\n${list.join("\n\n")}`;
+    } catch (err: any) {
+      return `Search error: ${err.message}`;
+    }
+  }
+
+  if (action === "web_fetch") {
+    const targetUrl = params[0];
+    if (!targetUrl) return "Error: URL is required";
+    try {
+      const content = await webFetch(targetUrl);
+      if (!content) return `No readable content found at ${targetUrl}`;
+      return `Content from ${targetUrl}:\n\n${content}`;
+    } catch (err: any) {
+      return `Fetch error: ${err.message}`;
+    }
+  }
+
+  return `Unknown tool: ${action}`;
+}
