@@ -55,7 +55,8 @@ export async function captureCurrentScreen(): Promise<{ path: string; base64: st
 }
 
 // Tool call pattern: [[TOOL:action]] or [[TOOL:action|param1|param2|...]]
-const TOOL_PATTERN = /\[\[TOOL:(\w+)(?:\|([^\]]*))?\]\]/g;
+// Second ] is optional to handle LLM typos that emit only one closing bracket
+const TOOL_PATTERN = /\[\[TOOL:(\w+)(?:\|([^\]]*))?\]\]?/g;
 
 export interface ToolResult {
   tool: string;
@@ -105,7 +106,11 @@ export function buildIntegrationToolsPrompt(db: Database.Database, userId: strin
     prompt += "- List running apps: `Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | Select Name,MainWindowTitle`\n\n";
   }
 
-  prompt += "To use any tool, output the EXACT syntax shown. The system executes it and returns the result to you.\n\n";
+  prompt += "## ⚠️ TOOL SYNTAX RULES — MUST FOLLOW EXACTLY\n\n";
+  prompt += "- Format: `[[TOOL:action|param]]` — double square brackets on BOTH sides: `[[` to open, `]]` to close.\n";
+  prompt += "- Do NOT wrap tool calls in backticks or markdown code blocks. Output them as plain text.\n";
+  prompt += "- Do NOT add quotes around the parameter. Write the command directly: `[[TOOL:shell_exec|open -a Brave]]` NOT `[[TOOL:shell_exec|\"open -a Brave\"]]`\n";
+  prompt += "- The system detects these patterns and executes them — they must appear verbatim.\n\n";
 
   // Web tools — always available
   prompt += "## Web Search & Browse\n\n";
@@ -226,7 +231,9 @@ export async function executeToolCalls(
 
   for (const match of matches) {
     const action = match[1]!;
-    const params = match[2] ? match[2].split("|").map((p) => p.trim()) : [];
+    // Strip surrounding quotes that LLMs sometimes add around params (e.g. "open -a Brave")
+    const stripQuotes = (s: string) => s.replace(/^(["'])(.*)\1$/, "$2");
+    const params = match[2] ? match[2].split("|").map((p) => stripQuotes(p.trim())) : [];
 
     try {
       const result = await executeTool(db, userId, action, params);
