@@ -14,7 +14,10 @@
     "package": "tsc && electron-builder --linux",
     "package:deb": "tsc && electron-builder --linux deb",
     "package:appimage": "tsc && electron-builder --linux AppImage",
-    "package:all": "tsc && electron-builder --linux deb AppImage"
+    "package:all": "tsc && electron-builder --linux deb AppImage",
+    "package:deb:x64": "tsc && electron-builder --linux deb --x64",
+    "package:appimage:x64": "tsc && electron-builder --linux AppImage --x64",
+    "package:all:x64": "tsc && electron-builder --linux deb AppImage --x64"
   },
   "dependencies": {
     "@grammyjs/runner": "^2.0.3",
