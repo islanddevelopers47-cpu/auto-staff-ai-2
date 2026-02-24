@@ -63,11 +63,14 @@ function connectWs() {
 
 function addEvent(event, data) {
   const el = document.getElementById('events');
-  if (!el) return;
-  const time = new Date().toLocaleTimeString();
-  const text = `${time} [${event}] ${JSON.stringify(data).slice(0, 80)}`;
-  el.innerHTML = `<div class="event-item">${text}</div>` + el.innerHTML;
-  if (el.children.length > 50) el.lastChild.remove();
+  if (el) {
+    const time = new Date().toLocaleTimeString();
+    const text = `${time} [${event}] ${JSON.stringify(data).slice(0, 80)}`;
+    el.innerHTML = `<div class="event-item">${text}</div>` + el.innerHTML;
+    if (el.children.length > 50) el.lastChild.remove();
+  }
+  // Live-refresh Bot Chats panel when a session is updated
+  handleBotChatsWsEvent(event, data);
 }
 
 // --- Screens ---
@@ -99,6 +102,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     if (btn.dataset.tab === 'bots') loadBots();
     if (btn.dataset.tab === 'agents') loadAgents();
     if (btn.dataset.tab === 'chat') loadChatBots();
+    if (btn.dataset.tab === 'bot-chats') loadBotChats();
     if (btn.dataset.tab === 'agent-chat') loadAgentChatList();
     if (btn.dataset.tab === 'agent-projects') loadProjects();
     if (btn.dataset.tab === 'integrations') loadIntegrations();
@@ -480,6 +484,119 @@ function escapeHtml(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// --- Bot Chats (saved per-bot Telegram conversations) ---
+let botChatsBots = [];
+let botChatsSelectedSessionId = null;
+let botChatsSelectedBotId = null;
+
+async function loadBotChats() {
+  try {
+    const data = await api('/bots');
+    botChatsBots = data.bots.filter(b => b.platform !== 'web');
+    const sel = document.getElementById('bot-chats-bot-select');
+    if (!botChatsBots.length) {
+      sel.innerHTML = '<option value="">No Telegram bots</option>';
+      document.getElementById('bot-chats-sessions').innerHTML =
+        '<div style="padding:1rem;color:var(--text-dim);font-size:0.85rem">No bots configured yet.</div>';
+      return;
+    }
+    sel.innerHTML = botChatsBots.map(b =>
+      `<option value="${b.id}">${b.name}${b.telegram_bot_username ? ' (@' + b.telegram_bot_username + ')' : ''}</option>`
+    ).join('');
+    // If previously selected bot is still in list, keep it
+    if (botChatsSelectedBotId && botChatsBots.find(b => b.id === botChatsSelectedBotId)) {
+      sel.value = botChatsSelectedBotId;
+    } else {
+      botChatsSelectedBotId = sel.value;
+    }
+    await loadBotSessions(botChatsSelectedBotId);
+  } catch (err) { console.error('Bot chats load error:', err); }
+}
+
+document.getElementById('bot-chats-bot-select').addEventListener('change', async (e) => {
+  botChatsSelectedBotId = e.target.value;
+  botChatsSelectedSessionId = null;
+  document.getElementById('bot-chats-messages').innerHTML = '';
+  document.getElementById('bot-chats-header').textContent = 'Select a conversation';
+  await loadBotSessions(botChatsSelectedBotId);
+});
+
+async function loadBotSessions(botId) {
+  if (!botId) return;
+  const container = document.getElementById('bot-chats-sessions');
+  container.innerHTML = '<div style="padding:1rem;color:var(--text-dim);font-size:0.85rem">Loading...</div>';
+  try {
+    const data = await api(`/bots/${botId}/sessions`);
+    if (!data.sessions.length) {
+      container.innerHTML = '<div style="padding:1rem;color:var(--text-dim);font-size:0.85rem">No conversations yet. Messages from Telegram will appear here.</div>';
+      return;
+    }
+    container.innerHTML = data.sessions.map(s => {
+      const lastActive = new Date(s.updated_at).toLocaleString();
+      const label = s.title || `Chat ${s.chat_id}`;
+      const typeIcon = s.chat_type === 'private' ? '👤' : '👥';
+      const isSelected = s.id === botChatsSelectedSessionId;
+      return `<div class="bot-chat-session${isSelected ? ' selected' : ''}" data-session-id="${s.id}" data-chat-id="${s.chat_id}" onclick="selectBotSession('${s.id}', '${escapeHtml(label)}', '${s.chat_type}', ${s.message_count})">
+        <div style="display:flex;align-items:center;gap:0.4rem;font-weight:600;font-size:0.85rem">${typeIcon} ${escapeHtml(label)}</div>
+        <div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px">${s.message_count} messages · ${lastActive}</div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `<div style="padding:1rem;color:var(--text-dim);font-size:0.85rem">Error: ${err.message}</div>`;
+  }
+}
+
+async function selectBotSession(sessionId, label, chatType, msgCount) {
+  botChatsSelectedSessionId = sessionId;
+  // Update selected highlight
+  document.querySelectorAll('.bot-chat-session').forEach(el => el.classList.remove('selected'));
+  const el = document.querySelector(`.bot-chat-session[data-session-id="${sessionId}"]`);
+  if (el) el.classList.add('selected');
+  // Update header
+  const typeIcon = chatType === 'private' ? '👤' : '👥';
+  document.getElementById('bot-chats-header').textContent = `${typeIcon} ${label} — ${msgCount} messages`;
+  // Load messages
+  await loadSessionMessages(sessionId);
+}
+
+async function loadSessionMessages(sessionId) {
+  const box = document.getElementById('bot-chats-messages');
+  box.innerHTML = '<div style="color:var(--text-dim);font-size:0.85rem">Loading messages...</div>';
+  try {
+    const data = await api(`/sessions/${sessionId}/messages?limit=100`);
+    if (!data.messages.length) {
+      box.innerHTML = '<div style="color:var(--text-dim);font-size:0.85rem">No messages yet.</div>';
+      return;
+    }
+    box.innerHTML = data.messages.map(m => {
+      const time = new Date(m.created_at).toLocaleTimeString();
+      const isUser = m.role === 'user';
+      const meta = JSON.parse(m.metadata || '{}');
+      const senderLabel = isUser ? (meta.senderName || 'User') : 'Agent';
+      return `<div class="chat-msg ${isUser ? 'user' : 'assistant'}">
+        <div class="sender">${escapeHtml(senderLabel)} <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400">${time}</span></div>
+        <div class="bubble">${escapeHtml(m.content)}</div>
+      </div>`;
+    }).join('');
+    box.scrollTop = box.scrollHeight;
+  } catch (err) {
+    box.innerHTML = `<div style="color:var(--text-dim)">Error: ${err.message}</div>`;
+  }
+}
+
+// Live refresh: when session:message WS event fires for the selected bot/session, reload
+function handleBotChatsWsEvent(event, data) {
+  if (event !== 'session:message') return;
+  // Refresh session list for the active bot
+  if (data.botId === botChatsSelectedBotId) {
+    loadBotSessions(botChatsSelectedBotId);
+    // If this session is currently open, refresh its messages too
+    if (data.sessionId === botChatsSelectedSessionId) {
+      loadSessionMessages(botChatsSelectedSessionId);
+    }
+  }
+}
+
 // --- Agent Chat ---
 let agentChatAgents = [];
 let agentChatMsgCounter = 0;
@@ -671,6 +788,8 @@ window.stopBot = stopBot;
 window.restartBot = restartBot;
 window.deleteBot = deleteBot;
 window.deleteAgent = deleteAgent;
+window.selectBotSession = selectBotSession;
+window.loadBotChats = loadBotChats;
 
 // --- Init ---
 async function init() {

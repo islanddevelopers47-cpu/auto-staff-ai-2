@@ -10,6 +10,7 @@ export type EventType =
   | "message:inbound"
   | "message:outbound"
   | "agent:error"
+  | "session:message"
   | "system:info";
 
 export interface EventPayload {
@@ -42,6 +43,7 @@ export class EventBus extends EventEmitter {
       "message:inbound",
       "message:outbound",
       "agent:error",
+      "session:message",
       "system:info",
     ];
     for (const event of events) {

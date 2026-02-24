@@ -9,6 +9,7 @@ import {
   findOrCreateSession,
   getSessionHistory,
   addMessage,
+  updateSessionTimestamp,
 } from "../database/sessions.js";
 import { buildSkillsPrompt } from "./skills-loader.js";
 import { buildIntegrationToolsPrompt, executeToolCalls, captureCurrentScreen } from "../integrations/agent-tools.js";
@@ -168,8 +169,9 @@ export async function runAgent(
       finalContent = currentContent;
     }
 
-    // Save assistant response
+    // Save assistant response and bump session timestamp
     addMessage(db, session.id, "assistant", finalContent);
+    updateSessionTimestamp(db, session.id);
 
     return {
       response: finalContent,

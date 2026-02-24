@@ -282,6 +282,15 @@ export class BotManager {
         text: result.response,
         model: result.model,
       });
+
+      // Emit session update so the UI can refresh the bot chat panel
+      this.eventBus?.emit("session:message", {
+        botId,
+        sessionId: result.sessionId,
+        agentId: agent.id,
+        chatId: msg.chatId,
+        senderName: msg.senderName,
+      });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       log.error(`Agent error for bot ${botId}: ${errMsg}`);

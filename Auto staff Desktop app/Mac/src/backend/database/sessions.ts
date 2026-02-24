@@ -98,6 +98,26 @@ export function clearSessionHistory(
   db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId);
 }
 
+export function updateSessionTimestamp(
+  db: Database.Database,
+  sessionId: string
+): void {
+  db.prepare(
+    "UPDATE sessions SET updated_at = datetime('now') WHERE id = ?"
+  ).run(sessionId);
+}
+
+export function listSessionsForAgent(
+  db: Database.Database,
+  agentId: string
+): Session[] {
+  return db
+    .prepare(
+      "SELECT * FROM sessions WHERE agent_id = ? ORDER BY updated_at DESC"
+    )
+    .all(agentId) as Session[];
+}
+
 export function listSessions(
   db: Database.Database,
   botId: string

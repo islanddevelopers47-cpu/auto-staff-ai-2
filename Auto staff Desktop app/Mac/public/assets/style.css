@@ -599,6 +599,17 @@ header nav { display: flex; gap: 0.2rem; flex-wrap: wrap; }
 .file-item .file-size { color: var(--text-dim); font-size: 0.73rem; }
 .file-item.folder { font-weight: 600; }
 
+/* === Bot Chats Session List === */
+.bot-chat-session {
+  padding: 0.65rem 0.9rem;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  transition: background 0.15s;
+}
+.bot-chat-session:last-child { border-bottom: none; }
+.bot-chat-session:hover { background: rgba(255,255,255,0.05); }
+.bot-chat-session.selected { background: rgba(139,92,246,0.18); border-left: 3px solid var(--accent); }
+
 /* === Agent Chat Info === */
 .agent-chat-info {
   display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
