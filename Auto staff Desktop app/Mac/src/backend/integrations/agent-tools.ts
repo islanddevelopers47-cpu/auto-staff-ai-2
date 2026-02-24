@@ -93,11 +93,24 @@ export function buildIntegrationToolsPrompt(db: Database.Database, userId: strin
 
   if (platform === "darwin") {
     prompt += "**macOS quick reference** (use shell_exec):\n";
-    prompt += "- Open any app: `open -a \"App Name\"` (e.g., `open -a \"Roblox\"`, `open -a \"Safari\"`, `open -a \"Finder\"`)\n";
-    prompt += "- Open a URL: `open \"https://example.com\"`\n";
+    prompt += "- Open any app: `open -a \"Exact App Name\"` — the name must match exactly what appears in /Applications\n";
+    prompt += "- Open a URL in default browser: `open \"https://example.com\"`\n";
     prompt += "- Open a file: `open \"/path/to/file\"`\n";
     prompt += "- Kill a process: `pkill -x \"App Name\"`\n";
     prompt += "- List running apps: `ps aux | grep -v grep | grep .app`\n\n";
+    prompt += "**Common macOS app names** (use these exact strings with open -a):\n";
+    prompt += "- Brave: `open -a \"Brave Browser\"`\n";
+    prompt += "- Chrome: `open -a \"Google Chrome\"`\n";
+    prompt += "- Firefox: `open -a \"Firefox\"`\n";
+    prompt += "- Safari: `open -a \"Safari\"`\n";
+    prompt += "- VS Code: `open -a \"Visual Studio Code\"`\n";
+    prompt += "- Slack: `open -a \"Slack\"`\n";
+    prompt += "- Spotify: `open -a \"Spotify\"`\n";
+    prompt += "- Discord: `open -a \"Discord\"`\n";
+    prompt += "- Telegram: `open -a \"Telegram\"`\n\n";
+    prompt += "**Unknown app name?** First run: [[TOOL:shell_exec|ls /Applications/ | grep -i appname]] to find the exact .app filename, then open it.\n";
+    prompt += "Example: user says \"open brave\" → first try `open -a \"Brave Browser\"`. If error, run `ls /Applications/ | grep -i brave` to find name, then open.\n\n";
+    prompt += "**CRITICAL RULE**: If the app is not found, report the error to the user. Do NOT open a different app as a substitute. Never open Safari, Chrome, or any other app the user did not ask for.\n\n";
   } else if (platform === "win32") {
     prompt += "**Windows quick reference** (use shell_exec, runs in PowerShell):\n";
     prompt += "- Open any app: `Start-Process \"AppName\"` or `Start-Process \"C:\\path\\to\\app.exe\"`\n";
