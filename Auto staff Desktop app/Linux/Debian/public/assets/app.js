@@ -927,22 +927,9 @@ function setupFirebaseAuth() {
     try {
       errEl.style.display = 'none';
       const provider = new firebase.auth.GoogleAuthProvider();
-      // Use redirect instead of popup to avoid Electron/storage-partitioned issues
-      await auth.signInWithRedirect(provider);
-    } catch (err) {
-      errEl.textContent = err.message;
-      errEl.style.display = '';
-    }
-  });
-
-  // Handle redirect result (fires on page load after redirect)
-  auth.getRedirectResult().then(async (result) => {
-    if (result && result.user) {
+      const result = await auth.signInWithPopup(provider);
       await exchangeFirebaseToken(result.user);
-    }
-  }).catch((err) => {
-    const errEl = document.getElementById('firebase-error');
-    if (errEl) {
+    } catch (err) {
       errEl.textContent = err.message;
       errEl.style.display = '';
     }
