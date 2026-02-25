@@ -1,20 +1,25 @@
-import * as functions from "firebase-functions";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
 
 admin.initializeApp();
 
-const stripe = new Stripe(functions.config().stripe?.secret_key || process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2026-01-28.clover",
-});
+let _stripe: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!_stripe) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) throw new Error("STRIPE_SECRET_KEY not set");
+    _stripe = new Stripe(key, { apiVersion: "2026-01-28.clover" as any });
+  }
+  return _stripe;
+}
 
 // ---------------------------------------------------------------------------
 // Scheduled: delete Firebase accounts for canceled/unpaid subscriptions
 // Runs every 24 hours. Gives users 3 days grace after subscription ends.
 // ---------------------------------------------------------------------------
-export const deleteUnpaidUsers = functions.pubsub
-  .schedule("every 24 hours")
-  .onRun(async () => {
+export const deleteUnpaidUsers = onSchedule({ schedule: "every 24 hours", secrets: ["STRIPE_SECRET_KEY"] }, async () => {
     const gracePeriodMs = 3 * 24 * 60 * 60 * 1000; // 3 days
     const cutoff = Math.floor((Date.now() - gracePeriodMs) / 1000); // Unix timestamp
 
@@ -59,7 +64,6 @@ export const deleteUnpaidUsers = functions.pubsub
     }
 
     console.log(`deleteUnpaidUsers: deleted=${deleted}, skipped=${skipped}`);
-    return null;
   });
 
 // ---------------------------------------------------------------------------
@@ -67,8 +71,8 @@ export const deleteUnpaidUsers = functions.pubsub
 // Use this if deploying the backend to a serverless environment where you
 // prefer to handle webhooks via Firebase Functions instead.
 // ---------------------------------------------------------------------------
-export const stripeWebhook = functions.https.onRequest(async (req, res) => {
-  const webhookSecret = functions.config().stripe?.webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || "";
+export const stripeWebhook = onRequest({ secrets: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] }, async (req, res) => {
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 
   if (!webhookSecret) {
     console.error("STRIPE_WEBHOOK_SECRET not set");
@@ -79,7 +83,7 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
   let event: Stripe.Event;
   try {
     const sig = req.headers["stripe-signature"] as string;
-    event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+    event = getStripe().webhooks.constructEvent(req.rawBody, sig, webhookSecret);
   } catch (err: any) {
     console.error(`Webhook signature failed: ${err.message}`);
     res.status(400).send(`Webhook Error: ${err.message}`);
@@ -101,7 +105,7 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
           if (!email) break;
 
           // Get subscription details
-          const sub = await stripe.subscriptions.retrieve(subscriptionId);
+          const sub = await getStripe().subscriptions.retrieve(subscriptionId);
 
           // Find or create Firebase Auth user
           let fbUser: admin.auth.UserRecord;
@@ -117,7 +121,7 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
 
             // Generate password setup link
             try {
-              const link = await admin.auth().generatePasswordResetLink(email);
+              await admin.auth().generatePasswordResetLink(email);
               console.log(`Password reset link generated for ${email}`);
               // TODO: send via email provider (SendGrid, Resend, etc.)
               // await sendWelcomeEmail(email, link);
