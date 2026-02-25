@@ -81,6 +81,7 @@ export interface FirebaseUser {
   displayName: string | undefined;
   photoURL: string | undefined;
   provider: string;
+  customClaims: Record<string, any>;
 }
 
 /**
@@ -99,6 +100,7 @@ export async function verifyFirebaseToken(
       displayName: decoded.name,
       photoURL: decoded.picture,
       provider: decoded.firebase?.sign_in_provider || "unknown",
+      customClaims: decoded,
     };
   } catch (err) {
     return null;

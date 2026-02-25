@@ -26,6 +26,9 @@ const EnvSchema = z.object({
   NETLIFY_CLIENT_SECRET: z.string().optional(),
   DOCKER_HOST: z.string().optional(),
   MOONSHOT_FREE_API_KEY: z.string().optional(),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_ID: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof EnvSchema>;

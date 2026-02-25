@@ -1066,22 +1066,87 @@ async function checkAuthProviders() {
 
 // Exchange Firebase ID token for local JWT
 async function firebaseTokenExchange(firebaseUser) {
+  const errEl = document.getElementById('firebase-error');
   try {
-    const idToken = await firebaseUser.getIdToken();
-    const data = await api('/auth/firebase', {
+    const idToken = await firebaseUser.getIdToken(true); // force refresh to pick up new claims
+    const res = await fetch(`${API}/auth/firebase`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken }),
     });
+    const data = await res.json();
+
+    if (res.status === 403 && data.error === 'payment_required') {
+      // User needs to pay — redirect to Stripe Checkout
+      await redirectToStripeCheckout(data.firebaseUid, data.email);
+      return;
+    }
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
     token = data.token;
     user = data.user;
     localStorage.setItem('token', token);
     showDashboard();
   } catch (err) {
-    const errEl = document.getElementById('firebase-error');
     errEl.textContent = err.message || 'Authentication failed';
     errEl.style.display = '';
   }
 }
+
+// Redirect user to Stripe Checkout for subscription payment
+async function redirectToStripeCheckout(firebaseUid, email) {
+  const errEl = document.getElementById('firebase-error');
+  try {
+    errEl.textContent = 'Subscription required — redirecting to payment...';
+    errEl.style.display = '';
+    errEl.style.color = '#f0c040';
+
+    const res = await fetch(`${API}/stripe/create-checkout-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        firebaseUid,
+        email,
+        successUrl: window.location.origin + '/?payment=success',
+        cancelUrl: window.location.origin + '/?payment=cancelled',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to create checkout session');
+
+    // Redirect to Stripe-hosted checkout page
+    window.location.href = data.url;
+  } catch (err) {
+    errEl.textContent = err.message || 'Failed to redirect to payment';
+    errEl.style.display = '';
+    errEl.style.color = '';
+  }
+}
+
+// Handle payment success/cancel URL params
+function handlePaymentReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const payment = params.get('payment');
+  if (payment === 'success') {
+    const errEl = document.getElementById('firebase-error');
+    if (errEl) {
+      errEl.textContent = 'Payment successful! Please sign in again to activate your account.';
+      errEl.style.display = '';
+      errEl.style.color = '#4ade80';
+    }
+    // Clean up URL
+    window.history.replaceState({}, '', window.location.pathname);
+  } else if (payment === 'cancelled') {
+    const errEl = document.getElementById('firebase-error');
+    if (errEl) {
+      errEl.textContent = 'Payment was cancelled. You need an active subscription to use this app.';
+      errEl.style.display = '';
+      errEl.style.color = '#f87171';
+    }
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+}
+handlePaymentReturn();
 
 // Helper: Firebase sign-in via popup only (no redirect)
 async function firebaseSignIn(provider) {

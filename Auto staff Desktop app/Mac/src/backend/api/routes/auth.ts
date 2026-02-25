@@ -48,6 +48,7 @@ export function createAuthRouter(db: Database.Database): Router {
   });
 
   // Firebase token exchange — frontend sends Firebase ID token, backend returns local JWT
+  // Also checks Stripe subscription status if Stripe billing is enabled
   router.post("/auth/firebase", async (req, res) => {
     try {
       if (!isFirebaseEnabled()) {
@@ -65,6 +66,23 @@ export function createAuthRouter(db: Database.Database): Router {
       if (!fbUser) {
         res.status(401).json({ error: "Invalid Firebase token" });
         return;
+      }
+
+      // --- Stripe subscription check ---
+      // If STRIPE_SECRET_KEY is set, billing is enforced for Firebase users
+      const env = getEnv();
+      if (env.STRIPE_SECRET_KEY) {
+        const stripeRole = fbUser.customClaims?.stripeRole;
+        if (stripeRole !== "premium") {
+          // User has no active subscription — tell frontend to redirect to payment
+          res.status(403).json({
+            error: "payment_required",
+            message: "An active subscription is required to access this app.",
+            firebaseUid: fbUser.uid,
+            email: fbUser.email,
+          });
+          return;
+        }
       }
 
       // Find or create local user

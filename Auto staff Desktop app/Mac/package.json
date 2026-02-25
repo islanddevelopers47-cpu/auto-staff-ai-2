@@ -28,6 +28,7 @@
     "nanoid": "^5.1.2",
     "node-fetch": "^3.3.2",
     "openai": "^4.77.0",
+    "stripe": "^20.3.1",
     "tslog": "^4.10.0",
     "ws": "^8.18.0",
     "zod": "^3.24.1"
@@ -60,8 +61,16 @@
     "dmg": {
       "title": "Claw Staffer",
       "contents": [
-        { "x": 130, "y": 220 },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "files": [

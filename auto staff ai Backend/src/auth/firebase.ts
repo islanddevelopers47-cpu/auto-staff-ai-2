@@ -16,12 +16,16 @@ export function initFirebase(): boolean {
 
   if (!serviceAccountPath) {
     // Auto-detect service account file in project root
-    const cwd = process.cwd();
-    const files = fs.readdirSync(cwd).filter(
-      (f) => f.includes("firebase-adminsdk") && f.endsWith(".json")
-    );
-    if (files.length > 0) {
-      serviceAccountPath = path.resolve(cwd, files[0]);
+    try {
+      const cwd = process.cwd();
+      const files = fs.readdirSync(cwd).filter(
+        (f: string) => f.includes("firebase-adminsdk") && f.endsWith(".json")
+      );
+      if (files.length > 0) {
+        serviceAccountPath = path.resolve(cwd, files[0]);
+      }
+    } catch {
+      // CWD may not be readable (e.g. inside asar archive)
     }
   }
 
@@ -77,6 +81,7 @@ export interface FirebaseUser {
   displayName: string | undefined;
   photoURL: string | undefined;
   provider: string;
+  customClaims: Record<string, any>;
 }
 
 /**
@@ -95,6 +100,7 @@ export async function verifyFirebaseToken(
       displayName: decoded.name,
       photoURL: decoded.picture,
       provider: decoded.firebase?.sign_in_provider || "unknown",
+      customClaims: decoded,
     };
   } catch (err) {
     return null;

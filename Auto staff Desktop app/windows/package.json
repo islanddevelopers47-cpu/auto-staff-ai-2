@@ -32,6 +32,7 @@
     "openai": "^4.77.0",
     "tslog": "^4.10.0",
     "ws": "^8.18.0",
+    "stripe": "^17.5.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
