@@ -335,4 +335,12 @@ const MIGRATIONS = [
       CREATE INDEX idx_project_messages_project ON project_messages(project_id);
     `,
   },
+  {
+    name: "008_stripe_billing",
+    sql: `
+      ALTER TABLE users ADD COLUMN stripe_customer_id TEXT;
+      ALTER TABLE users ADD COLUMN stripe_subscription_status TEXT;
+      CREATE INDEX idx_users_stripe_customer ON users(stripe_customer_id);
+    `,
+  },
 ];

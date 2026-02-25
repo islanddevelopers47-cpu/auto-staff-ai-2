@@ -15,7 +15,6 @@ import { createIntegrationsRouter } from "./integrations.js";
 import { createAgentTasksRouter } from "./agent-tasks.js";
 import { createProjectsRouter } from "./projects.js";
 import { createChatRouter } from "./chat.js";
-import { createStripeRouter } from "./stripe.js";
 
 export function registerRoutes(
   app: Express,
@@ -61,9 +60,6 @@ export function registerRoutes(
 
   // Mobile chat route
   app.use("/api", createChatRouter(db, agentRegistry));
-
-  // Stripe billing routes (checkout, webhook, subscription check)
-  app.use("/api", createStripeRouter());
 
   // Telegram webhook endpoint (per-bot)
   app.post("/api/telegram/webhook/:botId", (req, res) => {

@@ -8,6 +8,7 @@ import { resolveIntegrationCred } from "../../database/integration-config.js";
 import { upsertConnectedAccount } from "../../database/connected-accounts.js";
 import { getEnv } from "../../config/env.js";
 import { createLogger } from "../../utils/logger.js";
+import { isBillingEnabled } from "./billing.js";
 
 const log = createLogger("auth");
 
@@ -48,7 +49,6 @@ export function createAuthRouter(db: Database.Database): Router {
   });
 
   // Firebase token exchange — frontend sends Firebase ID token, backend returns local JWT
-  // Also checks Stripe subscription status if Stripe billing is enabled
   router.post("/auth/firebase", async (req, res) => {
     try {
       if (!isFirebaseEnabled()) {
@@ -68,27 +68,19 @@ export function createAuthRouter(db: Database.Database): Router {
         return;
       }
 
-      // --- Stripe subscription check ---
-      // If STRIPE_SECRET_KEY is set, billing is enforced for Firebase users
-      const env = getEnv();
-      if (env.STRIPE_SECRET_KEY) {
-        const stripeRole = fbUser.customClaims?.stripeRole;
-        if (stripeRole !== "premium") {
-          // User has no active subscription — tell frontend to redirect to payment
-          res.status(403).json({
-            error: "payment_required",
-            message: "An active subscription is required to access this app.",
-            firebaseUid: fbUser.uid,
-            email: fbUser.email,
-          });
-          return;
-        }
-      }
-
       // Find or create local user
       let user = findUserByFirebaseUid(db, fbUser.uid);
 
       if (!user) {
+        // If billing is enabled, new Firebase users must have paid first via Stripe checkout.
+        // The webhook creates the user — if they aren't in DB here, they haven't paid.
+        if (isBillingEnabled()) {
+          res.status(402).json({
+            error: "subscription_required",
+            message: "A subscription is required. Please complete payment before signing in.",
+          });
+          return;
+        }
         user = createFirebaseUser(db, {
           firebaseUid: fbUser.uid,
           email: fbUser.email,
@@ -106,6 +98,24 @@ export function createAuthRouter(db: Database.Database): Router {
         user = findUserById(db, user.id)!;
       }
 
+      // --- Subscription check on every login ---
+      // Admin users always bypass billing.
+      if (isBillingEnabled() && user.role !== "admin") {
+        const status = user.stripe_subscription_status;
+        const blocked = status === "past_due" || status === "canceled" || status === "unpaid" || status === "incomplete_expired";
+        const noSub = !status;
+        if (blocked || noSub) {
+          res.status(402).json({
+            error: "subscription_required",
+            message: blocked
+              ? `Your subscription is ${status}. Please update your payment to regain access.`
+              : "A subscription is required to access this platform.",
+            status: status ?? "no_subscription",
+          });
+          return;
+        }
+      }
+
       const token = signJwt({ userId: user.id, role: user.role });
 
       res.json({
@@ -118,6 +128,7 @@ export function createAuthRouter(db: Database.Database): Router {
           email: user.email,
           photoUrl: user.photo_url,
           authProvider: user.auth_provider,
+          subscriptionStatus: user.stripe_subscription_status,
         },
       });
     } catch (err: any) {

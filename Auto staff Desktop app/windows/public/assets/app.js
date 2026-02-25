@@ -77,11 +77,26 @@ function addEvent(event, data) {
 function showLogin() {
   document.getElementById('login-screen').style.display = '';
   document.getElementById('dashboard-screen').style.display = 'none';
+  document.getElementById('pricing-screen').style.display = 'none';
+}
+
+function showPricing(blockedMessage) {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard-screen').style.display = 'none';
+  document.getElementById('pricing-screen').style.display = '';
+  const banner = document.getElementById('subscription-blocked-banner');
+  if (blockedMessage) {
+    banner.textContent = blockedMessage;
+    banner.style.display = '';
+  } else {
+    banner.style.display = 'none';
+  }
 }
 
 function showDashboard() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('dashboard-screen').style.display = '';
+  document.getElementById('pricing-screen').style.display = 'none';
   const userLabel = user
     ? (user.email || user.displayName || user.username) + ` (${user.role})`
     : '';
@@ -89,6 +104,60 @@ function showDashboard() {
   connectWs();
   loadDashboard();
 }
+
+// --- Billing ---
+let _billingEnabled = false;
+
+async function checkBillingStatus() {
+  try {
+    const data = await fetch(`${API}/billing/status`).then(r => r.json());
+    _billingEnabled = data.enabled === true;
+    return data;
+  } catch {
+    _billingEnabled = false;
+    return { enabled: false };
+  }
+}
+
+async function startCheckout(email) {
+  const res = await fetch(`${API}/billing/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Checkout failed');
+  return data;
+}
+
+// Subscribe button handler
+document.getElementById('subscribe-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('subscribe-btn');
+  const errEl = document.getElementById('checkout-error');
+  const email = document.getElementById('checkout-email').value.trim();
+  if (!email) {
+    errEl.textContent = 'Please enter your email address.';
+    errEl.style.display = '';
+    return;
+  }
+  errEl.style.display = 'none';
+  btn.textContent = 'Redirecting to payment...';
+  btn.disabled = true;
+  try {
+    const data = await startCheckout(email);
+    window.location.href = data.url;
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = '';
+    btn.textContent = 'Subscribe & Get Access';
+    btn.disabled = false;
+  }
+});
+
+// Back to login from pricing
+document.getElementById('back-to-login-btn').addEventListener('click', () => {
+  showLogin();
+});
 
 // --- Tabs ---
 document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -809,18 +878,153 @@ window.loadBotChats = loadBotChats;
 
 // --- Init ---
 async function init() {
+  // Check billing status first (fast, unauthenticated)
+  await checkBillingStatus();
+
   if (token) {
     try {
       const data = await api('/auth/me');
       user = data;
       showDashboard();
-    } catch {
+    } catch (err) {
       localStorage.removeItem('token');
       token = null;
-      showLogin();
+      if (_billingEnabled) {
+        showPricing();
+      } else {
+        showLogin();
+      }
     }
   } else {
-    showLogin();
+    if (_billingEnabled) {
+      // Show pricing screen by default when billing is on (users must pay first)
+      showPricing();
+      // But also set up Firebase auth state listener so returning subscribers go straight to login
+    } else {
+      showLogin();
+    }
+  }
+
+  // Wire Firebase auth
+  if (typeof firebase !== 'undefined' && firebase.auth) {
+    setupFirebaseAuth();
+  }
+}
+
+function setupFirebaseAuth() {
+  const auth = firebase.auth();
+
+  // Google Sign-In
+  document.getElementById('google-signin-btn').addEventListener('click', async () => {
+    const errEl = document.getElementById('firebase-error');
+    try {
+      errEl.style.display = 'none';
+      const provider = new firebase.auth.GoogleAuthProvider();
+      const result = await auth.signInWithPopup(provider);
+      await exchangeFirebaseToken(result.user);
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = '';
+    }
+  });
+
+  // GitHub Sign-In
+  document.getElementById('github-signin-btn').addEventListener('click', () => {
+    window.open('/api/auth/github/login', 'github-login', 'width=600,height=700');
+    window.addEventListener('message', async (e) => {
+      if (e.data?.type === 'github_oauth_token') {
+        const errEl = document.getElementById('firebase-error');
+        try {
+          const credential = firebase.auth.GithubAuthProvider.credential(e.data.accessToken);
+          const result = await auth.signInWithCredential(credential);
+          await exchangeFirebaseToken(result.user);
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.style.display = '';
+        }
+      }
+    }, { once: true });
+  });
+
+  // Email/Password form
+  document.getElementById('firebase-email-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('firebase-error');
+    const email = document.getElementById('fb-email').value;
+    const password = document.getElementById('fb-password').value;
+    try {
+      errEl.style.display = 'none';
+      const result = await auth.signInWithEmailAndPassword(email, password);
+      await exchangeFirebaseToken(result.user);
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = '';
+    }
+  });
+
+  // Register button — if billing enabled, redirect to pricing; else create account
+  document.getElementById('fb-register-btn').addEventListener('click', async () => {
+    if (_billingEnabled) {
+      // Pre-fill email if typed
+      const email = document.getElementById('fb-email').value;
+      if (email) document.getElementById('checkout-email').value = email;
+      showPricing();
+      return;
+    }
+    const errEl = document.getElementById('firebase-error');
+    const email = document.getElementById('fb-email').value;
+    const password = document.getElementById('fb-password').value;
+    if (!email || !password) {
+      errEl.textContent = 'Enter email and password to register.';
+      errEl.style.display = '';
+      return;
+    }
+    try {
+      errEl.style.display = 'none';
+      const result = await auth.createUserWithEmailAndPassword(email, password);
+      await exchangeFirebaseToken(result.user);
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = '';
+    }
+  });
+
+  // Show Firebase section if Firebase is available
+  fetch(`${API}/auth/providers`).then(r => r.json()).then(data => {
+    if (data.firebase) {
+      document.getElementById('firebase-auth-section').style.display = '';
+    }
+  }).catch(() => {});
+}
+
+async function exchangeFirebaseToken(fbUser) {
+  const errEl = document.getElementById('firebase-error');
+  try {
+    const idToken = await fbUser.getIdToken();
+    const res = await fetch(`${API}/auth/firebase`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+    const data = await res.json();
+
+    if (res.status === 402) {
+      // Subscription required — show pricing screen with message
+      showPricing(data.message || 'A subscription is required to access this platform.');
+      return;
+    }
+
+    if (!res.ok) throw new Error(data.error || 'Authentication failed');
+
+    token = data.token;
+    user = data.user;
+    localStorage.setItem('token', token);
+    showDashboard();
+  } catch (err) {
+    if (errEl) {
+      errEl.textContent = err.message;
+      errEl.style.display = '';
+    }
   }
 }
 
@@ -1066,87 +1270,22 @@ async function checkAuthProviders() {
 
 // Exchange Firebase ID token for local JWT
 async function firebaseTokenExchange(firebaseUser) {
-  const errEl = document.getElementById('firebase-error');
   try {
-    const idToken = await firebaseUser.getIdToken(true); // force refresh to pick up new claims
-    const res = await fetch(`${API}/auth/firebase`, {
+    const idToken = await firebaseUser.getIdToken();
+    const data = await api('/auth/firebase', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken }),
     });
-    const data = await res.json();
-
-    if (res.status === 403 && data.error === 'payment_required') {
-      // User needs to pay — redirect to Stripe Checkout
-      await redirectToStripeCheckout(data.firebaseUid, data.email);
-      return;
-    }
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-
     token = data.token;
     user = data.user;
     localStorage.setItem('token', token);
     showDashboard();
   } catch (err) {
+    const errEl = document.getElementById('firebase-error');
     errEl.textContent = err.message || 'Authentication failed';
     errEl.style.display = '';
   }
 }
-
-// Redirect user to Stripe Checkout for subscription payment
-async function redirectToStripeCheckout(firebaseUid, email) {
-  const errEl = document.getElementById('firebase-error');
-  try {
-    errEl.textContent = 'Subscription required — redirecting to payment...';
-    errEl.style.display = '';
-    errEl.style.color = '#f0c040';
-
-    const res = await fetch(`${API}/stripe/create-checkout-session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        firebaseUid,
-        email,
-        successUrl: window.location.origin + '/?payment=success',
-        cancelUrl: window.location.origin + '/?payment=cancelled',
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to create checkout session');
-
-    // Redirect to Stripe-hosted checkout page
-    window.location.href = data.url;
-  } catch (err) {
-    errEl.textContent = err.message || 'Failed to redirect to payment';
-    errEl.style.display = '';
-    errEl.style.color = '';
-  }
-}
-
-// Handle payment success/cancel URL params
-function handlePaymentReturn() {
-  const params = new URLSearchParams(window.location.search);
-  const payment = params.get('payment');
-  if (payment === 'success') {
-    const errEl = document.getElementById('firebase-error');
-    if (errEl) {
-      errEl.textContent = 'Payment successful! Please sign in again to activate your account.';
-      errEl.style.display = '';
-      errEl.style.color = '#4ade80';
-    }
-    // Clean up URL
-    window.history.replaceState({}, '', window.location.pathname);
-  } else if (payment === 'cancelled') {
-    const errEl = document.getElementById('firebase-error');
-    if (errEl) {
-      errEl.textContent = 'Payment was cancelled. You need an active subscription to use this app.';
-      errEl.style.display = '';
-      errEl.style.color = '#f87171';
-    }
-    window.history.replaceState({}, '', window.location.pathname);
-  }
-}
-handlePaymentReturn();
 
 // Helper: Firebase sign-in via popup only (no redirect)
 async function firebaseSignIn(provider) {

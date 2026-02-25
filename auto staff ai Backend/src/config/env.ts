@@ -29,6 +29,7 @@ const EnvSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_ID: z.string().optional(),
+  STRIPE_BILLING_ENABLED: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof EnvSchema>;

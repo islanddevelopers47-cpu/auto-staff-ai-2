@@ -13,6 +13,8 @@ export interface User {
   email: string | null;
   photo_url: string | null;
   auth_provider: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -81,6 +83,8 @@ export async function createUser(
     email: null,
     photo_url: null,
     auth_provider: "local",
+    stripe_customer_id: null,
+    stripe_subscription_status: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -153,6 +157,22 @@ export function createFirebaseUser(
   );
 
   return db.prepare("SELECT * FROM users WHERE id = ?").get(id) as User;
+}
+
+export function updateStripeStatus(
+  db: Database.Database,
+  userId: string,
+  status: string,
+  customerId?: string
+): void {
+  const fields = ["stripe_subscription_status = ?", "updated_at = datetime('now')"];
+  const values: unknown[] = [status];
+  if (customerId) {
+    fields.unshift("stripe_customer_id = ?");
+    values.unshift(customerId);
+  }
+  values.push(userId);
+  db.prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = ?`).run(...values);
 }
 
 export function updateFirebaseUser(

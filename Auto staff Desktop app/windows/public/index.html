@@ -82,6 +82,47 @@
       </div>
     </div>
 
+    <!-- Pricing / Subscribe screen (shown when billing enabled and user hasn't paid) -->
+    <div id="pricing-screen" class="screen" style="display:none">
+      <div class="card center-card" style="max-width:480px">
+        <div style="text-align:center;margin-bottom:1rem">
+          <img src="/assets/logo-512.png" alt="Claw Staffer" style="width:64px;height:64px;border-radius:12px">
+        </div>
+        <h1 style="text-align:center">Subscribe to Access</h1>
+        <p class="subtitle" style="text-align:center">Get full access to Claw Staffer — AI-powered bot management, agent automation, and desktop control.</p>
+
+        <div id="subscription-blocked-banner" style="display:none;background:rgba(255,80,80,0.12);border:1px solid rgba(255,80,80,0.35);border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;color:#ff9090;font-size:0.9rem"></div>
+
+        <div class="pricing-card">
+          <div class="pricing-amount"><span class="pricing-currency">$</span><span id="pricing-amount-value">29</span><span class="pricing-period">/month</span></div>
+          <ul class="pricing-features">
+            <li>✓ Unlimited Telegram bots</li>
+            <li>✓ AI agent automation</li>
+            <li>✓ Desktop screen control</li>
+            <li>✓ All integrations (GitHub, Drive, Netlify, Vercel)</li>
+            <li>✓ Full skill library (56 skills)</li>
+            <li>✓ Cancel anytime</li>
+          </ul>
+        </div>
+
+        <div class="field" style="margin-top:1.25rem">
+          <label for="checkout-email">Your email address</label>
+          <input type="email" id="checkout-email" placeholder="you@example.com" required>
+        </div>
+
+        <button id="subscribe-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;padding:0.85rem;font-size:1rem">
+          Subscribe &amp; Get Access
+        </button>
+        <p id="checkout-error" class="error" style="display:none;margin-top:0.5rem"></p>
+        <p style="text-align:center;font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem">
+          Secure payment via Stripe. You'll receive an email to set your password after payment.
+        </p>
+
+        <div class="auth-divider"><span>already subscribed?</span></div>
+        <button id="back-to-login-btn" class="btn" style="width:100%">Sign In</button>
+      </div>
+    </div>
+
     <!-- Dashboard -->
     <div id="dashboard-screen" class="screen" style="display:none">
       <header>

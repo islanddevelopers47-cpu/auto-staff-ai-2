@@ -4,149 +4,247 @@ import Stripe from "stripe";
 
 admin.initializeApp();
 
-const db = admin.firestore();
+const stripe = new Stripe(functions.config().stripe?.secret_key || process.env.STRIPE_SECRET_KEY || "", {
+  apiVersion: "2026-01-28.clover",
+});
 
-/**
- * Scheduled Cloud Function — runs every 24 hours.
- * Checks for users with canceled/unpaid/past_due subscriptions
- * that have been inactive for 30+ days, then deletes their Firebase account.
- *
- * Also directly queries Stripe for subscription status as the source of truth.
- */
+// ---------------------------------------------------------------------------
+// Scheduled: delete Firebase accounts for canceled/unpaid subscriptions
+// Runs every 24 hours. Gives users 3 days grace after subscription ends.
+// ---------------------------------------------------------------------------
 export const deleteUnpaidUsers = functions.pubsub
   .schedule("every 24 hours")
   .onRun(async () => {
-    const stripeKey = functions.config().stripe?.secret_key;
-    if (!stripeKey) {
-      console.warn("Stripe secret key not configured — skipping unpaid user cleanup");
-      return;
-    }
+    const gracePeriodMs = 3 * 24 * 60 * 60 * 1000; // 3 days
+    const cutoff = Math.floor((Date.now() - gracePeriodMs) / 1000); // Unix timestamp
 
-    const stripe = new Stripe(stripeKey);
-    const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
+    const db = admin.firestore();
 
-    // List all Firebase Auth users (paginated)
-    let nextPageToken: string | undefined;
-    let deletedCount = 0;
+    // Find users whose subscription is canceled/unpaid and grace period has passed
+    const snapshot = await db
+      .collection("users")
+      .where("stripeSubscriptionStatus", "in", ["canceled", "unpaid", "past_due", "incomplete_expired"])
+      .get();
 
-    do {
-      const listResult = await admin.auth().listUsers(1000, nextPageToken);
-      nextPageToken = listResult.pageToken;
+    let deleted = 0;
+    let skipped = 0;
 
-      for (const userRecord of listResult.users) {
-        // Skip users with active stripeRole claim
-        if (userRecord.customClaims?.stripeRole === "premium") {
-          continue;
-        }
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const uid = doc.id;
 
-        // Skip users created less than 7 days ago (grace period for new signups)
-        const createdAt = new Date(userRecord.metadata.creationTime).getTime();
-        if (Date.now() - createdAt < 7 * 24 * 60 * 60 * 1000) {
-          continue;
-        }
-
-        // Check Stripe for this user's subscription status
-        const email = userRecord.email;
-        if (!email) continue;
-
-        try {
-          const customers = await stripe.customers.list({ email, limit: 1 });
-          if (customers.data.length === 0) {
-            // No Stripe customer — user never paid. Delete if older than 30 days.
-            const ageSeconds = (Date.now() - createdAt) / 1000;
-            if (ageSeconds > 30 * 24 * 60 * 60) {
-              await deleteUser(userRecord.uid, email);
-              deletedCount++;
-            }
-            continue;
-          }
-
-          // Check for any active or trialing subscription
-          const activeSubs = await stripe.subscriptions.list({
-            customer: customers.data[0].id,
-            status: "active",
-            limit: 1,
-          });
-          if (activeSubs.data.length > 0) continue;
-
-          const trialSubs = await stripe.subscriptions.list({
-            customer: customers.data[0].id,
-            status: "trialing",
-            limit: 1,
-          });
-          if (trialSubs.data.length > 0) continue;
-
-          // Check canceled/unpaid/past_due — if last period ended 30+ days ago, delete
-          const allSubs = await stripe.subscriptions.list({
-            customer: customers.data[0].id,
-            limit: 5,
-          });
-
-          const recentEnd = allSubs.data.reduce((latest, sub) => {
-            return Math.max(latest, sub.current_period_end || 0);
-          }, 0);
-
-          if (recentEnd > 0 && recentEnd < thirtyDaysAgo) {
-            await deleteUser(userRecord.uid, email);
-            deletedCount++;
-          }
-        } catch (err) {
-          console.error(`Error checking subscription for ${email}:`, err);
-        }
+      // Skip if the subscription ended recently (still within grace period)
+      const periodEnd = data.stripeCurrentPeriodEnd as number | undefined;
+      if (periodEnd && periodEnd > cutoff) {
+        skipped++;
+        continue;
       }
-    } while (nextPageToken);
 
-    console.log(`Unpaid user cleanup complete — deleted ${deletedCount} users`);
-  });
-
-/**
- * Delete a Firebase user and clean up Firestore data
- */
-async function deleteUser(uid: string, email: string): Promise<void> {
-  try {
-    // Delete Firebase Auth account
-    await admin.auth().deleteUser(uid);
-
-    // Clean up Firestore user document if it exists
-    const userDoc = db.collection("users").doc(uid);
-    const snap = await userDoc.get();
-    if (snap.exists) {
-      // Delete subcollections (subscriptions, checkout_sessions, etc.)
-      const subcollections = await userDoc.listCollections();
-      for (const subcol of subcollections) {
-        const docs = await subcol.listDocuments();
-        for (const doc of docs) {
-          await doc.delete();
-        }
-      }
-      await userDoc.delete();
-    }
-
-    console.log(`Deleted unpaid user: ${uid} (${email})`);
-  } catch (err) {
-    console.error(`Failed to delete user ${uid} (${email}):`, err);
-  }
-}
-
-/**
- * Webhook-triggered cleanup: immediately revoke access when subscription is deleted.
- * This is called by the Stripe webhook handler in the backend, but can also be
- * deployed as a standalone Cloud Function if you prefer.
- */
-export const onSubscriptionDeleted = functions.firestore
-  .document("users/{userId}/subscriptions/{subscriptionId}")
-  .onUpdate(async (change, context) => {
-    const after = change.after.data();
-    const status = after?.status;
-
-    if (status === "canceled" || status === "unpaid") {
-      const userId = context.params.userId;
       try {
-        // Revoke premium claim
-        await admin.auth().setCustomUserClaims(userId, { stripeRole: null });
-        console.log(`Revoked stripeRole for user ${userId} (subscription ${status})`);
-      } catch (err) {
-        console.error(`Failed to revoke claims for ${userId}:`, err);
+        // Delete Firebase Auth account
+        await admin.auth().deleteUser(uid);
+        // Delete Firestore user doc
+        await doc.ref.delete();
+        deleted++;
+        console.log(`Deleted unpaid user: ${uid} (status: ${data.stripeSubscriptionStatus})`);
+      } catch (e: any) {
+        if (e.code === "auth/user-not-found") {
+          // Auth user already gone — just clean up Firestore
+          await doc.ref.delete().catch(() => {});
+          deleted++;
+        } else {
+          console.error(`Failed to delete user ${uid}: ${e.message}`);
+        }
       }
     }
+
+    console.log(`deleteUnpaidUsers: deleted=${deleted}, skipped=${skipped}`);
+    return null;
   });
+
+// ---------------------------------------------------------------------------
+// Stripe webhook handler via Firebase HTTPS function (alternative to backend)
+// Use this if deploying the backend to a serverless environment where you
+// prefer to handle webhooks via Firebase Functions instead.
+// ---------------------------------------------------------------------------
+export const stripeWebhook = functions.https.onRequest(async (req, res) => {
+  const webhookSecret = functions.config().stripe?.webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || "";
+
+  if (!webhookSecret) {
+    console.error("STRIPE_WEBHOOK_SECRET not set");
+    res.status(500).send("Webhook secret not configured");
+    return;
+  }
+
+  let event: Stripe.Event;
+  try {
+    const sig = req.headers["stripe-signature"] as string;
+    event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+  } catch (err: any) {
+    console.error(`Webhook signature failed: ${err.message}`);
+    res.status(400).send(`Webhook Error: ${err.message}`);
+    return;
+  }
+
+  console.log(`Stripe webhook: ${event.type}`);
+  const db = admin.firestore();
+
+  try {
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.mode === "subscription" && session.payment_status === "paid") {
+          const email = session.metadata?.email || session.customer_email;
+          const customerId = session.customer as string;
+          const subscriptionId = session.subscription as string;
+
+          if (!email) break;
+
+          // Get subscription details
+          const sub = await stripe.subscriptions.retrieve(subscriptionId);
+
+          // Find or create Firebase Auth user
+          let fbUser: admin.auth.UserRecord;
+          try {
+            fbUser = await admin.auth().getUserByEmail(email);
+          } catch {
+            fbUser = await admin.auth().createUser({
+              email,
+              emailVerified: true,
+              displayName: email.split("@")[0],
+            });
+            console.log(`Created Firebase user for ${email}: ${fbUser.uid}`);
+
+            // Generate password setup link
+            try {
+              const link = await admin.auth().generatePasswordResetLink(email);
+              console.log(`Password reset link generated for ${email}`);
+              // TODO: send via email provider (SendGrid, Resend, etc.)
+              // await sendWelcomeEmail(email, link);
+            } catch (e) {
+              console.warn(`Could not generate password reset link: ${e}`);
+            }
+          }
+
+          // Set premium custom claim
+          await admin.auth().setCustomUserClaims(fbUser.uid, {
+            stripeRole: "premium",
+            stripeCustomerId: customerId,
+          });
+
+          // Sync to Firestore
+          await db.collection("users").doc(fbUser.uid).set({
+            email,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: subscriptionId,
+            stripeSubscriptionStatus: sub.status,
+            stripeCurrentPeriodEnd: (sub as any).current_period_end,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+
+          console.log(`Provisioned account for ${email} (uid: ${fbUser.uid})`);
+        }
+        break;
+      }
+
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+        if (!customerId) break;
+
+        const users = await db
+          .collection("users")
+          .where("stripeCustomerId", "==", customerId)
+          .limit(1)
+          .get();
+
+        if (!users.empty) {
+          const userDoc = users.docs[0];
+          await userDoc.ref.update({
+            stripeSubscriptionStatus: "active",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          // Restore premium claim
+          await admin.auth().setCustomUserClaims(userDoc.id, {
+            stripeRole: "premium",
+            stripeCustomerId: customerId,
+          });
+          console.log(`Invoice paid — restored active for ${userDoc.id}`);
+        }
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+        if (!customerId) break;
+
+        const users = await db
+          .collection("users")
+          .where("stripeCustomerId", "==", customerId)
+          .limit(1)
+          .get();
+
+        if (!users.empty) {
+          const userDoc = users.docs[0];
+          await userDoc.ref.update({
+            stripeSubscriptionStatus: "past_due",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          // Revoke premium claim
+          await admin.auth().setCustomUserClaims(userDoc.id, {
+            stripeRole: null,
+            stripeCustomerId: customerId,
+          });
+          console.log(`Invoice failed — marked past_due for ${userDoc.id}`);
+        }
+        break;
+      }
+
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted": {
+        const sub = event.data.object as Stripe.Subscription;
+        const customerId = sub.customer as string;
+
+        const users = await db
+          .collection("users")
+          .where("stripeCustomerId", "==", customerId)
+          .limit(1)
+          .get();
+
+        if (!users.empty) {
+          const userDoc = users.docs[0];
+          const active = sub.status === "active" || sub.status === "trialing";
+
+          await userDoc.ref.update({
+            stripeSubscriptionStatus: sub.status,
+            stripeCurrentPeriodEnd: (sub as any).current_period_end,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          await admin.auth().setCustomUserClaims(userDoc.id, {
+            stripeRole: active ? "premium" : null,
+            stripeCustomerId: customerId,
+          });
+
+          // Immediately delete if canceled or unpaid (no grace period version)
+          if (sub.status === "canceled") {
+            console.log(`Subscription canceled for ${userDoc.id} — scheduled for deletion by deleteUnpaidUsers`);
+          }
+
+          console.log(`Subscription ${sub.status} for user ${userDoc.id}`);
+        }
+        break;
+      }
+
+      default:
+        break;
+    }
+  } catch (err: any) {
+    console.error(`Handler error for ${event.type}: ${err.message}`);
+  }
+
+  res.json({ received: true });
+});

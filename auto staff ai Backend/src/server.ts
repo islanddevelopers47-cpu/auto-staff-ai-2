@@ -10,6 +10,7 @@ import { EventBus } from "./gateway/events.js";
 import { attachWebSocketServer } from "./gateway/ws-server.js";
 import { getPort, getHost, isDev } from "./config/env.js";
 import { createLogger } from "./utils/logger.js";
+import { createBillingRouter } from "./api/routes/billing.js";
 
 const log = createLogger("server");
 
@@ -23,10 +24,15 @@ export async function startServer(
 
   // Middleware
   app.use(cors());
-  // Stripe webhook needs raw body — must come before express.json()
-  app.use("/api/stripe/webhook", express.raw({ type: "application/json" }));
+
+  // Stripe webhook requires raw body — must be registered BEFORE express.json()
+  app.use("/api/billing/webhook", express.raw({ type: "application/json" }));
+
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true }));
+
+  // Billing routes (Stripe checkout, webhook, portal)
+  app.use("/api", createBillingRouter(db));
 
   // Request logging in dev
   if (isDev()) {
