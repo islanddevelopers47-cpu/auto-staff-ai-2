@@ -110,10 +110,13 @@ let _billingEnabled = false;
 
 async function checkBillingStatus() {
   try {
-    const data = await fetch(`${API}/billing/status`).then(r => r.json());
+    const res = await fetch(`${API}/billing/status`);
+    const data = await res.json();
     _billingEnabled = data.enabled === true;
+    console.log('[billing] status:', data);
     return data;
-  } catch {
+  } catch (e) {
+    console.warn('[billing] status check failed:', e);
     _billingEnabled = false;
     return { enabled: false };
   }
@@ -916,13 +919,30 @@ function setupFirebaseAuth() {
 
   // Google Sign-In
   document.getElementById('google-signin-btn').addEventListener('click', async () => {
+    if (_billingEnabled) {
+      showPricing('Please subscribe first to create your account.');
+      return;
+    }
     const errEl = document.getElementById('firebase-error');
     try {
       errEl.style.display = 'none';
       const provider = new firebase.auth.GoogleAuthProvider();
-      const result = await auth.signInWithPopup(provider);
-      await exchangeFirebaseToken(result.user);
+      // Use redirect instead of popup to avoid Electron/storage-partitioned issues
+      await auth.signInWithRedirect(provider);
     } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = '';
+    }
+  });
+
+  // Handle redirect result (fires on page load after redirect)
+  auth.getRedirectResult().then(async (result) => {
+    if (result && result.user) {
+      await exchangeFirebaseToken(result.user);
+    }
+  }).catch((err) => {
+    const errEl = document.getElementById('firebase-error');
+    if (errEl) {
       errEl.textContent = err.message;
       errEl.style.display = '';
     }
@@ -930,6 +950,10 @@ function setupFirebaseAuth() {
 
   // GitHub Sign-In
   document.getElementById('github-signin-btn').addEventListener('click', () => {
+    if (_billingEnabled) {
+      showPricing('Please subscribe first to create your account.');
+      return;
+    }
     window.open('/api/auth/github/login', 'github-login', 'width=600,height=700');
     window.addEventListener('message', async (e) => {
       if (e.data?.type === 'github_oauth_token') {
@@ -946,7 +970,7 @@ function setupFirebaseAuth() {
     }, { once: true });
   });
 
-  // Email/Password form
+  // Email/Password form (Sign In only — existing users who already paid)
   document.getElementById('firebase-email-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errEl = document.getElementById('firebase-error');
@@ -957,6 +981,12 @@ function setupFirebaseAuth() {
       const result = await auth.signInWithEmailAndPassword(email, password);
       await exchangeFirebaseToken(result.user);
     } catch (err) {
+      // If user not found and billing is on, redirect to pricing
+      if (_billingEnabled && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential')) {
+        if (email) document.getElementById('checkout-email').value = email;
+        showPricing('No account found. Subscribe first to get access.');
+        return;
+      }
       errEl.textContent = err.message;
       errEl.style.display = '';
     }
