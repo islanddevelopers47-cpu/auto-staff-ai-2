@@ -1,14 +1,9 @@
 import type Database from "better-sqlite3";
-import fs from "node:fs";
-import path from "node:path";
 import {
-  createAgent,
   findAgentById,
-  findAgentByName,
   listAgents,
   countAgents,
   type Agent,
-  type CreateAgentInput,
 } from "../database/agents.js";
 import { loadSkillsFromDir } from "./skills-loader.js";
 import { createLogger } from "../utils/logger.js";
@@ -36,40 +31,13 @@ export class AgentRegistry {
   }
 
   private async loadBuiltinAgents(): Promise<void> {
-    const agentsDir = path.resolve(process.cwd(), "agents");
-
-    // Collect names of built-in agents that still have a JSON definition
-    const validNames = new Set<string>();
-    if (fs.existsSync(agentsDir)) {
-      const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".json"));
-      for (const file of files) {
-        try {
-          const filePath = path.join(agentsDir, file);
-          const raw = fs.readFileSync(filePath, "utf-8");
-          const def = JSON.parse(raw) as CreateAgentInput & { id?: string };
-          validNames.add(def.name);
-
-          // Create only if not already present
-          const existing = findAgentByName(this.db, def.name);
-          if (!existing?.is_builtin) {
-            createAgent(this.db, { ...def, isBuiltin: true });
-            log.info(`Loaded built-in agent: ${def.name}`);
-          }
-        } catch (err) {
-          log.warn(`Failed to load agent from ${file}: ${err}`);
-        }
-      }
-    }
-
-    // Remove any built-in agents from DB whose JSON file no longer exists
-    const existing = this.db
+    // Remove ALL built-in agents from DB — agents must be added manually
+    const builtins = this.db
       .prepare("SELECT id, name FROM agents WHERE is_builtin = 1")
       .all() as { id: string; name: string }[];
-    for (const agent of existing) {
-      if (!validNames.has(agent.name)) {
-        this.db.prepare("DELETE FROM agents WHERE id = ?").run(agent.id);
-        log.info(`Removed built-in agent no longer in agents dir: ${agent.name}`);
-      }
+    for (const agent of builtins) {
+      this.db.prepare("DELETE FROM agents WHERE id = ?").run(agent.id);
+      log.info(`Removed built-in agent: ${agent.name}`);
     }
   }
 
@@ -95,9 +63,8 @@ export class AgentRegistry {
   }
 
   getDefaultAgent(): Agent | undefined {
-    // Return the first built-in agent, or the first agent
     const agents = listAgents(this.db);
-    return agents.find((a) => a.is_builtin) ?? agents[0];
+    return agents[0];
   }
 
   getAllAgents(): Agent[] {
