@@ -1016,6 +1016,15 @@ function setupFirebaseAuth() {
   fetch(`${API}/auth/providers`).then(r => r.json()).then(data => {
     if (data.firebase) {
       document.getElementById('firebase-auth-section').style.display = '';
+      // When billing is enabled, hide Google/GitHub buttons — users sign in with email/password only
+      if (_billingEnabled) {
+        const googleBtn = document.getElementById('google-signin-btn');
+        const githubBtn = document.getElementById('github-signin-btn');
+        const divider = document.querySelector('#firebase-auth-section .auth-divider');
+        if (googleBtn) googleBtn.style.display = 'none';
+        if (githubBtn) githubBtn.style.display = 'none';
+        if (divider) divider.style.display = 'none';
+      }
     }
   }).catch(() => {});
 }
