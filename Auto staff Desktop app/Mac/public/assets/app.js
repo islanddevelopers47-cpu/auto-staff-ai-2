@@ -148,7 +148,13 @@ document.getElementById('subscribe-btn').addEventListener('click', async () => {
   btn.disabled = true;
   try {
     const data = await startCheckout(email);
-    window.location.href = data.url;
+    // Open Stripe checkout in system browser (Electron can't navigate to external URLs)
+    if (window.desktop && window.desktop.openExternal) {
+      await window.desktop.openExternal(data.url);
+      btn.textContent = 'Payment opened in browser...';
+    } else {
+      window.location.href = data.url;
+    }
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = '';

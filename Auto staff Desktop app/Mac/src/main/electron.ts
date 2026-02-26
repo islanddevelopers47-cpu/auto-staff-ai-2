@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, dialog } from "electron";
+import { app, BrowserWindow, shell, dialog, ipcMain } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import { createServer } from "node:net";
@@ -212,6 +212,13 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  // IPC: open external URLs in system browser (used by Stripe checkout)
+  ipcMain.handle("open-external", (_event, url: string) => {
+    if (typeof url === "string" && url.startsWith("http")) {
+      return shell.openExternal(url);
+    }
+  });
+
   try {
     serverPort = await findFreePort();
     await startBackend(serverPort);
